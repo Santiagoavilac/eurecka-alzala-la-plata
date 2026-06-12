@@ -16,7 +16,9 @@ function RankingPage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="mx-auto flex max-w-5xl items-center justify-between px-4 py-5">
-        <Link to="/"><EurekaLogo size="sm" /></Link>
+        <Link to="/">
+          <EurekaLogo size="sm" />
+        </Link>
         <Button asChild size="sm" className="font-bold uppercase tracking-widest">
           <Link to="/rocket">Jugar</Link>
         </Button>
@@ -26,7 +28,9 @@ function RankingPage() {
         <h1 className="text-4xl font-black uppercase tracking-tighter sm:text-6xl">
           <span className="text-gradient-primary">Ranking</span>
         </h1>
-        <p className="mt-2 text-sm text-muted-foreground">Los mejores multiplicadores de Eureka Rocket.</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Los mejores multiplicadores de Eureka Rocket.
+        </p>
 
         <div className="mt-6">
           {isLoading ? (

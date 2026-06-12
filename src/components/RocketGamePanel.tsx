@@ -2,8 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { startRocketAttempt, cashOutRocketAttempt } from "@/lib/api";
-import { updateMockPlayer, type MockPlayer } from "@/lib/player";
+import {
+  cashOutRocketAttempt,
+  getPlayerStatus,
+  getRocketState,
+  startRocketAttempt,
+  type PlayerStatus,
+  type RocketState,
+} from "@/lib/api";
 
 type GameState = "idle" | "playing" | "cashed_out" | "exploded";
 
@@ -17,67 +23,129 @@ export function RocketGamePanel({
   player,
   onPlayerUpdate,
 }: {
-  player: MockPlayer;
-  onPlayerUpdate: (p: MockPlayer) => void;
+  player: PlayerStatus;
+  onPlayerUpdate: (p: PlayerStatus) => void;
 }) {
   const [state, setState] = useState<GameState>("idle");
   const [multiplier, setMultiplier] = useState(1.0);
   const [result, setResult] = useState<Result | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const attemptIdRef = useRef<string | null>(null);
-  const rafRef = useRef<number | null>(null);
-  const startRef = useRef<number>(0);
+  const pollRef = useRef<number | null>(null);
 
-  useEffect(() => () => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      stopPolling();
+    },
+    [],
+  );
 
   const noAttemptsLeft = player.attemptsUsed >= 3;
 
-  // ⚠️ Animación PURAMENTE VISUAL. El crash real lo decide el backend.
-  // No existe variable `crashPoint` aquí — el cliente sólo muestra un número creciente.
-  function startVisualLoop() {
-    startRef.current = performance.now();
-    const tick = (now: number) => {
-      const t = (now - startRef.current) / 1000;
-      const m = +(Math.pow(1.06, t * 10)).toFixed(2);
-      setMultiplier(m);
-      rafRef.current = requestAnimationFrame(tick);
-    };
-    rafRef.current = requestAnimationFrame(tick);
+  function stopPolling() {
+    if (pollRef.current) {
+      window.clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }
+
+  function applyTerminalState(next: RocketState) {
+    stopPolling();
+    const terminalMultiplier = next.cashedOutAt ?? next.currentMultiplier ?? multiplier;
+    setState(next.status === "crashed" ? "exploded" : "cashed_out");
+    setMultiplier(terminalMultiplier || 1);
+    setResult({
+      multiplier: terminalMultiplier || 1,
+      score: next.score ?? 0,
+      attemptsRemaining: Math.max(0, 3 - player.attemptsUsed),
+    });
+  }
+
+  async function refreshPlayer() {
+    const fresh = await getPlayerStatus();
+    if (fresh) onPlayerUpdate(fresh);
+    return fresh;
+  }
+
+  function startServerPolling(attemptId: string) {
+    stopPolling();
+    pollRef.current = window.setInterval(async () => {
+      try {
+        const next = await getRocketState(attemptId);
+        if (next.status === "playing") {
+          setMultiplier(next.currentMultiplier ?? 1);
+          return;
+        }
+
+        applyTerminalState(next);
+        const fresh = await refreshPlayer();
+        if (fresh) {
+          setResult((current) =>
+            current
+              ? { ...current, attemptsRemaining: Math.max(0, 3 - fresh.attemptsUsed) }
+              : current,
+          );
+        }
+      } catch {
+        setError("No pudimos actualizar el intento.");
+      }
+    }, 150);
   }
 
   async function handleStart() {
-    setResult(null);
-    setMultiplier(1.0);
-    const { attemptId } = await startRocketAttempt();
-    attemptIdRef.current = attemptId;
-    setState("playing");
-    startVisualLoop();
+    try {
+      setError(null);
+      setResult(null);
+      setMultiplier(1.0);
+      const attempt = await startRocketAttempt();
+      attemptIdRef.current = attempt.attemptId;
+      setState("playing");
+      startServerPolling(attempt.attemptId);
+      const fresh = await refreshPlayer();
+      if (fresh) {
+        setResult((current) =>
+          current
+            ? { ...current, attemptsRemaining: Math.max(0, 3 - fresh.attemptsUsed) }
+            : current,
+        );
+      }
+    } catch {
+      setError("No pudimos iniciar el intento.");
+    }
   }
 
   async function handleCashout() {
     if (!attemptIdRef.current) return;
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    const res = await cashOutRocketAttempt(attemptIdRef.current, multiplier);
-    setState("cashed_out");
-    const newUsed = player.attemptsUsed + 1;
-    const updated = updateMockPlayer({
-      attemptsUsed: newUsed,
-      bestScore: Math.max(player.bestScore, res.score ?? 0),
-      bestMultiplier: Math.max(player.bestMultiplier, res.multiplier ?? 0),
-    });
-    if (updated) onPlayerUpdate(updated);
-    setResult({
-      multiplier: res.multiplier ?? multiplier,
-      score: res.score ?? 0,
-      attemptsRemaining: 3 - newUsed,
-    });
+    try {
+      setError(null);
+      stopPolling();
+      const res = await cashOutRocketAttempt(attemptIdRef.current);
+      const cashedMultiplier = res.cashedOutAt ?? res.currentMultiplier ?? multiplier;
+      setState(res.status === "crashed" ? "exploded" : "cashed_out");
+      setMultiplier(cashedMultiplier || 1);
+      setResult({
+        multiplier: cashedMultiplier || 1,
+        score: res.score ?? 0,
+        attemptsRemaining: res.attemptsLeft,
+      });
+      onPlayerUpdate({
+        ...player,
+        attemptsUsed: res.attemptsUsed,
+        bestScore: res.bestScore,
+        bestMultiplier: res.bestMultiplier,
+      });
+    } catch {
+      setError("No pudimos registrar el retiro.");
+      startServerPolling(attemptIdRef.current);
+    }
   }
 
   function handleReset() {
+    stopPolling();
     setState("idle");
     setMultiplier(1.0);
     setResult(null);
+    setError(null);
   }
 
   const statusLabel: Record<GameState, string> = {
@@ -160,18 +228,30 @@ export function RocketGamePanel({
         )}
       </div>
 
+      {error && (
+        <p className="relative z-10 mt-4 text-center text-xs font-bold text-destructive">{error}</p>
+      )}
+
       {result && (
         <div className="relative z-10 mt-5 grid grid-cols-3 gap-2 rounded-xl border border-border bg-background/50 p-4 text-center">
           <div>
-            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Retiro</div>
-            <div className="font-mono text-xl font-black neon-text">{result.multiplier.toFixed(2)}x</div>
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              Retiro
+            </div>
+            <div className="font-mono text-xl font-black neon-text">
+              {result.multiplier.toFixed(2)}x
+            </div>
           </div>
           <div>
-            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Puntaje</div>
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              Puntaje
+            </div>
             <div className="font-mono text-xl font-black">{result.score}</div>
           </div>
           <div>
-            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Restantes</div>
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              Restantes
+            </div>
             <div className="font-mono text-xl font-black">{result.attemptsRemaining}</div>
           </div>
         </div>

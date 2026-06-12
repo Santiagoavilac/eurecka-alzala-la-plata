@@ -1,7 +1,12 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { ArrowDown, ArrowUp, ArrowUpDown, Search } from "lucide-react";
@@ -14,7 +19,7 @@ export interface Column<T> {
   className?: string;
 }
 
-export function DataTable<T extends Record<string, any>>({
+export function DataTable<T extends Record<string, unknown>>({
   data,
   columns,
   searchKeys,
@@ -34,14 +39,25 @@ export function DataTable<T extends Record<string, any>>({
     let rows = data;
     if (q && searchKeys?.length) {
       const term = q.toLowerCase();
-      rows = rows.filter((r) => searchKeys.some((k) => String(r[k] ?? "").toLowerCase().includes(term)));
+      rows = rows.filter((r) =>
+        searchKeys.some((k) =>
+          String(r[k] ?? "")
+            .toLowerCase()
+            .includes(term),
+        ),
+      );
     }
     if (sort) {
       rows = [...rows].sort((a, b) => {
-        const av = a[sort.key]; const bv = b[sort.key];
-        if (av == null) return 1; if (bv == null) return -1;
-        if (typeof av === "number" && typeof bv === "number") return sort.dir === "asc" ? av - bv : bv - av;
-        return sort.dir === "asc" ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
+        const av = a[sort.key];
+        const bv = b[sort.key];
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        if (typeof av === "number" && typeof bv === "number")
+          return sort.dir === "asc" ? av - bv : bv - av;
+        return sort.dir === "asc"
+          ? String(av).localeCompare(String(bv))
+          : String(bv).localeCompare(String(av));
       });
     }
     return rows;
@@ -76,7 +92,13 @@ export function DataTable<T extends Record<string, any>>({
           <TableHeader>
             <TableRow className="border-border/60 hover:bg-transparent">
               {columns.map((c) => (
-                <TableHead key={c.key} className={cn("text-xs uppercase tracking-widest text-muted-foreground", c.className)}>
+                <TableHead
+                  key={c.key}
+                  className={cn(
+                    "text-xs uppercase tracking-widest text-muted-foreground",
+                    c.className,
+                  )}
+                >
                   {c.sortable ? (
                     <button
                       onClick={() => toggleSort(c.key)}
@@ -84,28 +106,43 @@ export function DataTable<T extends Record<string, any>>({
                     >
                       {c.header}
                       {sort?.key === c.key ? (
-                        sort.dir === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />
+                        sort.dir === "asc" ? (
+                          <ArrowUp className="size-3" />
+                        ) : (
+                          <ArrowDown className="size-3" />
+                        )
                       ) : (
                         <ArrowUpDown className="size-3 opacity-40" />
                       )}
                     </button>
-                  ) : c.header}
+                  ) : (
+                    c.header
+                  )}
                 </TableHead>
               ))}
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={columns.length} className="py-10 text-center text-muted-foreground">{emptyLabel}</TableCell></TableRow>
-            ) : filtered.map((row, i) => (
-              <TableRow key={i} className="border-border/40 hover:bg-background/40">
-                {columns.map((c) => (
-                  <TableCell key={c.key} className={cn("font-mono text-sm", c.className)}>
-                    {c.render ? c.render(row) : String(row[c.key] ?? "")}
-                  </TableCell>
-                ))}
+              <TableRow>
+                <TableCell
+                  colSpan={columns.length}
+                  className="py-10 text-center text-muted-foreground"
+                >
+                  {emptyLabel}
+                </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              filtered.map((row, i) => (
+                <TableRow key={i} className="border-border/40 hover:bg-background/40">
+                  {columns.map((c) => (
+                    <TableCell key={c.key} className={cn("font-mono text-sm", c.className)}>
+                      {c.render ? c.render(row) : String(row[c.key] ?? "")}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </div>
