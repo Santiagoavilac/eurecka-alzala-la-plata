@@ -9,38 +9,180 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as RocketRouteImport } from './routes/rocket'
+import { Route as RankingRouteImport } from './routes/ranking'
+import { Route as EntrarRouteImport } from './routes/entrar'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminIndexRouteImport } from './routes/admin.index'
+import { Route as AdminSospechosaRouteImport } from './routes/admin.sospechosa'
+import { Route as AdminRankingRouteImport } from './routes/admin.ranking'
+import { Route as AdminParticipantesRouteImport } from './routes/admin.participantes'
+import { Route as AdminIntentosRouteImport } from './routes/admin.intentos'
 
+const RocketRoute = RocketRouteImport.update({
+  id: '/rocket',
+  path: '/rocket',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RankingRoute = RankingRouteImport.update({
+  id: '/ranking',
+  path: '/ranking',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EntrarRoute = EntrarRouteImport.update({
+  id: '/entrar',
+  path: '/entrar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminSospechosaRoute = AdminSospechosaRouteImport.update({
+  id: '/sospechosa',
+  path: '/sospechosa',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminRankingRoute = AdminRankingRouteImport.update({
+  id: '/ranking',
+  path: '/ranking',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminParticipantesRoute = AdminParticipantesRouteImport.update({
+  id: '/participantes',
+  path: '/participantes',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminIntentosRoute = AdminIntentosRouteImport.update({
+  id: '/intentos',
+  path: '/intentos',
+  getParentRoute: () => AdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
+  '/entrar': typeof EntrarRoute
+  '/ranking': typeof RankingRoute
+  '/rocket': typeof RocketRoute
+  '/admin/intentos': typeof AdminIntentosRoute
+  '/admin/participantes': typeof AdminParticipantesRoute
+  '/admin/ranking': typeof AdminRankingRoute
+  '/admin/sospechosa': typeof AdminSospechosaRoute
+  '/admin/': typeof AdminIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/entrar': typeof EntrarRoute
+  '/ranking': typeof RankingRoute
+  '/rocket': typeof RocketRoute
+  '/admin/intentos': typeof AdminIntentosRoute
+  '/admin/participantes': typeof AdminParticipantesRoute
+  '/admin/ranking': typeof AdminRankingRoute
+  '/admin/sospechosa': typeof AdminSospechosaRoute
+  '/admin': typeof AdminIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
+  '/entrar': typeof EntrarRoute
+  '/ranking': typeof RankingRoute
+  '/rocket': typeof RocketRoute
+  '/admin/intentos': typeof AdminIntentosRoute
+  '/admin/participantes': typeof AdminParticipantesRoute
+  '/admin/ranking': typeof AdminRankingRoute
+  '/admin/sospechosa': typeof AdminSospechosaRoute
+  '/admin/': typeof AdminIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/entrar'
+    | '/ranking'
+    | '/rocket'
+    | '/admin/intentos'
+    | '/admin/participantes'
+    | '/admin/ranking'
+    | '/admin/sospechosa'
+    | '/admin/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/entrar'
+    | '/ranking'
+    | '/rocket'
+    | '/admin/intentos'
+    | '/admin/participantes'
+    | '/admin/ranking'
+    | '/admin/sospechosa'
+    | '/admin'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/entrar'
+    | '/ranking'
+    | '/rocket'
+    | '/admin/intentos'
+    | '/admin/participantes'
+    | '/admin/ranking'
+    | '/admin/sospechosa'
+    | '/admin/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRouteWithChildren
+  EntrarRoute: typeof EntrarRoute
+  RankingRoute: typeof RankingRoute
+  RocketRoute: typeof RocketRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/rocket': {
+      id: '/rocket'
+      path: '/rocket'
+      fullPath: '/rocket'
+      preLoaderRoute: typeof RocketRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ranking': {
+      id: '/ranking'
+      path: '/ranking'
+      fullPath: '/ranking'
+      preLoaderRoute: typeof RankingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/entrar': {
+      id: '/entrar'
+      path: '/entrar'
+      fullPath: '/entrar'
+      preLoaderRoute: typeof EntrarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,22 +190,69 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/sospechosa': {
+      id: '/admin/sospechosa'
+      path: '/sospechosa'
+      fullPath: '/admin/sospechosa'
+      preLoaderRoute: typeof AdminSospechosaRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/ranking': {
+      id: '/admin/ranking'
+      path: '/ranking'
+      fullPath: '/admin/ranking'
+      preLoaderRoute: typeof AdminRankingRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/participantes': {
+      id: '/admin/participantes'
+      path: '/participantes'
+      fullPath: '/admin/participantes'
+      preLoaderRoute: typeof AdminParticipantesRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/intentos': {
+      id: '/admin/intentos'
+      path: '/intentos'
+      fullPath: '/admin/intentos'
+      preLoaderRoute: typeof AdminIntentosRouteImport
+      parentRoute: typeof AdminRoute
+    }
   }
 }
 
+interface AdminRouteChildren {
+  AdminIntentosRoute: typeof AdminIntentosRoute
+  AdminParticipantesRoute: typeof AdminParticipantesRoute
+  AdminRankingRoute: typeof AdminRankingRoute
+  AdminSospechosaRoute: typeof AdminSospechosaRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminIntentosRoute: AdminIntentosRoute,
+  AdminParticipantesRoute: AdminParticipantesRoute,
+  AdminRankingRoute: AdminRankingRoute,
+  AdminSospechosaRoute: AdminSospechosaRoute,
+  AdminIndexRoute: AdminIndexRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRouteWithChildren,
+  EntrarRoute: EntrarRoute,
+  RankingRoute: RankingRoute,
+  RocketRoute: RocketRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
