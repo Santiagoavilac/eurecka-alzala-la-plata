@@ -17,6 +17,11 @@ export default defineEventHandler(async (event) => {
   } catch (error) {
     const publicError = toPublicApiError(error, "login_failed");
     setResponseStatus(event, publicError.statusCode);
-    return { error: publicError.code };
+    return {
+      error: publicError.code,
+      operation: publicError.operation,
+      target: publicError.target,
+      supabase_code: publicError.supabase_code,
+    };
   }
 });

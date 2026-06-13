@@ -177,14 +177,32 @@ interface AdminAuditLogApiRow {
 
 class ApiClientError extends Error {
   status: number;
+  operation?: string;
+  target?: string;
+  supabaseCode?: string;
 
-  constructor(status: number, message: string) {
+  constructor(
+    status: number,
+    message: string,
+    details: { operation?: string; target?: string; supabase_code?: string } = {},
+  ) {
     super(message);
     this.status = status;
+    this.operation = details.operation;
+    this.target = details.target;
+    this.supabaseCode = details.supabase_code;
   }
 }
 
 export function apiErrorMessage(error: unknown, fallback = "api_error") {
+  if (error instanceof ApiClientError) {
+    const details = [
+      error.operation ? `operation=${error.operation}` : null,
+      error.target ? `target=${error.target}` : null,
+      error.supabaseCode ? `supabase_code=${error.supabaseCode}` : null,
+    ].filter(Boolean);
+    return details.length ? `${error.message} (${details.join(", ")})` : error.message;
+  }
   if (error instanceof Error && error.message) return error.message;
   return fallback;
 }
@@ -203,8 +221,17 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
 
   if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new ApiClientError(response.status, body?.error ?? "api_error");
+    const body = (await response.json().catch(() => null)) as {
+      error?: string;
+      operation?: string;
+      target?: string;
+      supabase_code?: string;
+    } | null;
+    throw new ApiClientError(response.status, body?.error ?? "api_error", {
+      operation: body?.operation,
+      target: body?.target,
+      supabase_code: body?.supabase_code,
+    });
   }
 
   return (await response.json()) as T;

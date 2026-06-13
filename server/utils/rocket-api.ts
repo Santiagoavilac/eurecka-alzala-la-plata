@@ -128,6 +128,9 @@ let supabase: ReturnType<typeof createClient<Database>> | null = null;
 type PublicApiError = {
   statusCode: number;
   code: string;
+  operation?: SupabaseOperation;
+  target?: SupabaseTarget;
+  supabase_code?: string;
 };
 
 type SupabaseErrorLike = {
@@ -138,12 +141,17 @@ type SupabaseErrorLike = {
 };
 
 type SupabaseOperation = "select" | "insert" | "update" | "rpc";
+type SupabaseTarget = "players" | "rocket_attempts" | "cash_out_rocket_attempt";
 
-function publicApiError(code: string, statusCode = 500) {
+function publicApiError(
+  code: string,
+  statusCode = 500,
+  details: Omit<PublicApiError, "code" | "statusCode"> = {},
+) {
   return createError({
     statusCode,
     statusMessage: code,
-    data: { error: code },
+    data: { error: code, ...details },
   });
 }
 
@@ -158,10 +166,36 @@ function supabaseErrorText(error: unknown) {
 export function classifySupabaseError(
   error: unknown,
   operation: SupabaseOperation,
-  tableOrFunction?: "players" | "rocket_attempts" | "cash_out_rocket_attempt",
+  tableOrFunction?: SupabaseTarget,
 ): PublicApiError {
   const text = supabaseErrorText(error);
   const code = (error as SupabaseErrorLike)?.code;
+  const base = {
+    statusCode: 500,
+    operation,
+    target: tableOrFunction,
+    supabase_code: code,
+  };
+
+  if (
+    code === "PGRST301" ||
+    text.includes("invalid api key") ||
+    text.includes("invalid jwt") ||
+    text.includes("jwt malformed") ||
+    text.includes("jwserror") ||
+    text.includes("signature")
+  ) {
+    return { ...base, code: "supabase_invalid_key" };
+  }
+
+  if (
+    code === "42501" ||
+    text.includes("permission denied") ||
+    text.includes("insufficient privilege") ||
+    text.includes("row-level security")
+  ) {
+    return { ...base, code: "supabase_permission_denied" };
+  }
 
   if (
     tableOrFunction === "players" &&
@@ -171,7 +205,7 @@ export function classifySupabaseError(
       text.includes("'players'") ||
       text.includes('"players"'))
   ) {
-    return { statusCode: 500, code: "players_table_missing" };
+    return { ...base, code: "players_table_missing" };
   }
 
   if (
@@ -182,7 +216,7 @@ export function classifySupabaseError(
       text.includes("'rocket_attempts'") ||
       text.includes('"rocket_attempts"'))
   ) {
-    return { statusCode: 500, code: "rocket_attempts_table_missing" };
+    return { ...base, code: "rocket_attempts_table_missing" };
   }
 
   if (
@@ -192,30 +226,56 @@ export function classifySupabaseError(
       text.includes("cash_out_rocket_attempt") ||
       text.includes("function"))
   ) {
-    return { statusCode: 500, code: "cash_out_rpc_missing" };
+    return { ...base, code: "cash_out_rpc_missing" };
   }
 
-  if (operation === "insert") return { statusCode: 500, code: "supabase_insert_failed" };
-  if (operation === "update") return { statusCode: 500, code: "supabase_update_failed" };
-  if (operation === "rpc") return { statusCode: 500, code: "supabase_rpc_failed" };
-  return { statusCode: 500, code: "supabase_select_failed" };
+  if (code?.startsWith("PGRST2") || text.includes("schema cache")) {
+    return { ...base, code: "supabase_schema_cache_failed" };
+  }
+
+  if (operation === "select" && tableOrFunction === "players") {
+    return { ...base, code: "players_select_failed" };
+  }
+  if (operation === "select" && tableOrFunction === "rocket_attempts") {
+    return { ...base, code: "rocket_attempts_select_failed" };
+  }
+  if (operation === "insert") return { ...base, code: "supabase_insert_failed" };
+  if (operation === "update") return { ...base, code: "supabase_update_failed" };
+  if (operation === "rpc") return { ...base, code: "supabase_rpc_failed" };
+  return { ...base, code: "supabase_select_failed" };
 }
 
 export function throwSupabaseApiError(
   error: unknown,
   operation: SupabaseOperation,
-  tableOrFunction?: "players" | "rocket_attempts" | "cash_out_rocket_attempt",
+  tableOrFunction?: SupabaseTarget,
 ): never {
   const publicError = classifySupabaseError(error, operation, tableOrFunction);
-  throw publicApiError(publicError.code, publicError.statusCode);
+  throw publicApiError(publicError.code, publicError.statusCode, {
+    operation: publicError.operation,
+    target: publicError.target,
+    supabase_code: publicError.supabase_code,
+  });
 }
 
 export function toPublicApiError(error: unknown, fallbackCode = "api_error"): PublicApiError {
-  const item = error as { statusCode?: number; statusMessage?: string; data?: { error?: string } };
+  const item = error as {
+    statusCode?: number;
+    statusMessage?: string;
+    data?: {
+      error?: string;
+      operation?: SupabaseOperation;
+      target?: SupabaseTarget;
+      supabase_code?: string;
+    };
+  };
   const code = item?.data?.error ?? item?.statusMessage ?? fallbackCode;
   return {
     statusCode: item?.statusCode ?? 500,
     code,
+    operation: item?.data?.operation,
+    target: item?.data?.target,
+    supabase_code: item?.data?.supabase_code,
   };
 }
 
