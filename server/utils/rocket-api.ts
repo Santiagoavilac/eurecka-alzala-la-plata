@@ -23,6 +23,7 @@ type Player = {
   phone_normalized: string;
   document_normalized: string;
   created_at: string;
+  last_login_at: string | null;
   status: "active" | "blocked";
 };
 
@@ -38,7 +39,20 @@ type RocketAttempt = {
   ended_at: string | null;
   cashed_out_at: number | string | null;
   score: number;
+  ip_address: string | null;
+  user_agent: string | null;
   created_at: string;
+};
+
+type CashOutRocketAttemptRow = {
+  attempt_id: string;
+  status: AttemptStatus;
+  current_multiplier: number | string | null;
+  cashed_out_at: number | string | null;
+  score: number;
+  crash_point: number | string | null;
+  server_seed: string | null;
+  ended_at: string | null;
 };
 
 type LeaderboardRow = {
@@ -53,7 +67,157 @@ type LeaderboardRow = {
     | null;
 };
 
-let supabase: ReturnType<typeof createClient> | null = null;
+type Database = {
+  public: {
+    Tables: {
+      players: {
+        Row: Player;
+        Insert: {
+          id?: string;
+          full_name: string;
+          phone: string;
+          document_id: string;
+          phone_normalized: string;
+          document_normalized: string;
+          created_at?: string;
+          last_login_at?: string | null;
+          status?: "active" | "blocked";
+        };
+        Update: Partial<Omit<Player, "id" | "created_at">>;
+        Relationships: [];
+      };
+      rocket_attempts: {
+        Row: RocketAttempt;
+        Insert: {
+          id?: string;
+          player_id: string;
+          attempt_number: number;
+          status?: AttemptStatus;
+          server_seed_hash: string;
+          server_seed?: string | null;
+          crash_point: number;
+          started_at: string;
+          ended_at?: string | null;
+          cashed_out_at?: number | null;
+          score?: number;
+          ip_address?: string | null;
+          user_agent?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Omit<RocketAttempt, "id" | "created_at">>;
+        Relationships: [];
+      };
+    };
+    Views: Record<string, never>;
+    Functions: {
+      cash_out_rocket_attempt: {
+        Args: {
+          p_attempt_id: string;
+          p_player_id: string;
+        };
+        Returns: CashOutRocketAttemptRow[];
+      };
+    };
+    Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
+  };
+};
+
+let supabase: ReturnType<typeof createClient<Database>> | null = null;
+
+type PublicApiError = {
+  statusCode: number;
+  code: string;
+};
+
+type SupabaseErrorLike = {
+  code?: string;
+  message?: string;
+  details?: string;
+  hint?: string;
+};
+
+type SupabaseOperation = "select" | "insert" | "update" | "rpc";
+
+function publicApiError(code: string, statusCode = 500) {
+  return createError({
+    statusCode,
+    statusMessage: code,
+    data: { error: code },
+  });
+}
+
+function supabaseErrorText(error: unknown) {
+  const item = error as SupabaseErrorLike;
+  return [item?.code, item?.message, item?.details, item?.hint]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+export function classifySupabaseError(
+  error: unknown,
+  operation: SupabaseOperation,
+  tableOrFunction?: "players" | "rocket_attempts" | "cash_out_rocket_attempt",
+): PublicApiError {
+  const text = supabaseErrorText(error);
+  const code = (error as SupabaseErrorLike)?.code;
+
+  if (
+    tableOrFunction === "players" &&
+    (code === "42P01" ||
+      code === "PGRST205" ||
+      text.includes("public.players") ||
+      text.includes("'players'") ||
+      text.includes('"players"'))
+  ) {
+    return { statusCode: 500, code: "players_table_missing" };
+  }
+
+  if (
+    tableOrFunction === "rocket_attempts" &&
+    (code === "42P01" ||
+      code === "PGRST205" ||
+      text.includes("public.rocket_attempts") ||
+      text.includes("'rocket_attempts'") ||
+      text.includes('"rocket_attempts"'))
+  ) {
+    return { statusCode: 500, code: "rocket_attempts_table_missing" };
+  }
+
+  if (
+    tableOrFunction === "cash_out_rocket_attempt" &&
+    (code === "42883" ||
+      code === "PGRST202" ||
+      text.includes("cash_out_rocket_attempt") ||
+      text.includes("function"))
+  ) {
+    return { statusCode: 500, code: "cash_out_rpc_missing" };
+  }
+
+  if (operation === "insert") return { statusCode: 500, code: "supabase_insert_failed" };
+  if (operation === "update") return { statusCode: 500, code: "supabase_update_failed" };
+  if (operation === "rpc") return { statusCode: 500, code: "supabase_rpc_failed" };
+  return { statusCode: 500, code: "supabase_select_failed" };
+}
+
+export function throwSupabaseApiError(
+  error: unknown,
+  operation: SupabaseOperation,
+  tableOrFunction?: "players" | "rocket_attempts" | "cash_out_rocket_attempt",
+): never {
+  const publicError = classifySupabaseError(error, operation, tableOrFunction);
+  throw publicApiError(publicError.code, publicError.statusCode);
+}
+
+export function toPublicApiError(error: unknown, fallbackCode = "api_error"): PublicApiError {
+  const item = error as { statusCode?: number; statusMessage?: string; data?: { error?: string } };
+  const code = item?.data?.error ?? item?.statusMessage ?? fallbackCode;
+  return {
+    statusCode: item?.statusCode ?? 500,
+    code,
+  };
+}
 
 export function db() {
   if (supabase) return supabase;
@@ -61,13 +225,10 @@ export function db() {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceRoleKey) {
-    throw createError({
-      statusCode: 500,
-      statusMessage: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY",
-    });
+    throw publicApiError("missing_env");
   }
 
-  supabase = createClient(supabaseUrl, serviceRoleKey, {
+  supabase = createClient<Database>(supabaseUrl, serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -100,7 +261,7 @@ export async function getPlayerStats(playerId: string) {
     .select("score, cashed_out_at", { count: "exact" })
     .eq("player_id", playerId);
 
-  if (result.error) throw result.error;
+  if (result.error) throwSupabaseApiError(result.error, "select", "rocket_attempts");
 
   const attempts = (result.data ?? []) as Pick<RocketAttempt, "score" | "cashed_out_at">[];
   const best = attempts.reduce(
@@ -129,7 +290,7 @@ export async function playerPayload(player: Player) {
 
 export async function getPlayer(playerId: string) {
   const result = await db().from("players").select("*").eq("id", playerId).maybeSingle();
-  if (result.error) throw result.error;
+  if (result.error) throwSupabaseApiError(result.error, "select", "players");
   const player = result.data as Player | null;
   if (!player || player.status !== "active") {
     throw createError({ statusCode: 404, statusMessage: "player_not_found" });
@@ -149,7 +310,7 @@ export async function loginOrCreatePlayer(fullName: string, phone: string) {
     .eq("phone_normalized", identity.phoneNormalized)
     .eq("document_normalized", identity.documentNormalized)
     .maybeSingle();
-  if (existing.error) throw existing.error;
+  if (existing.error) throwSupabaseApiError(existing.error, "select", "players");
 
   if (!existing.data) {
     const created = await db()
@@ -164,7 +325,7 @@ export async function loginOrCreatePlayer(fullName: string, phone: string) {
       })
       .select("*")
       .single();
-    if (created.error) throw created.error;
+    if (created.error) throwSupabaseApiError(created.error, "insert", "players");
     return created.data as Player;
   }
 
@@ -184,7 +345,7 @@ export async function loginOrCreatePlayer(fullName: string, phone: string) {
     .eq("id", player.id)
     .select("*")
     .single();
-  if (updated.error) throw updated.error;
+  if (updated.error) throwSupabaseApiError(updated.error, "update", "players");
   return updated.data as Player;
 }
 
@@ -337,7 +498,7 @@ export async function cashOutAttempt(attemptId: string, playerId: string) {
     if (result.error.message.includes("attempt_not_found")) {
       throw createError({ statusCode: 404, statusMessage: "attempt_not_found" });
     }
-    throw result.error;
+    throwSupabaseApiError(result.error, "rpc", "cash_out_rocket_attempt");
   }
 
   const row = Array.isArray(result.data) ? result.data[0] : result.data;
