@@ -131,6 +131,7 @@ type PublicApiError = {
   operation?: SupabaseOperation;
   target?: SupabaseTarget;
   supabase_code?: string;
+  diagnostic?: SupabaseRuntimeDiagnostic;
 };
 
 type SupabaseErrorLike = {
@@ -142,6 +143,17 @@ type SupabaseErrorLike = {
 
 type SupabaseOperation = "select" | "insert" | "update" | "rpc";
 type SupabaseTarget = "players" | "rocket_attempts" | "cash_out_rocket_attempt";
+type SupabaseRuntimeDiagnostic = {
+  supabase_url_set: boolean;
+  supabase_url_host?: string;
+  supabase_url_project_ref?: string;
+  service_role_key_set: boolean;
+  service_role_key_length?: number;
+  service_role_key_kind: "legacy_jwt" | "sb_secret" | "sb_publishable" | "unknown" | "missing";
+  service_role_key_jwt_role?: string;
+  service_role_key_jwt_ref?: string;
+  service_role_key_jwt_iss?: string;
+};
 
 function publicApiError(
   code: string,
@@ -255,6 +267,8 @@ export function throwSupabaseApiError(
     operation: publicError.operation,
     target: publicError.target,
     supabase_code: publicError.supabase_code,
+    diagnostic:
+      publicError.code === "supabase_invalid_key" ? supabaseRuntimeDiagnostic() : undefined,
   });
 }
 
@@ -267,6 +281,7 @@ export function toPublicApiError(error: unknown, fallbackCode = "api_error"): Pu
       operation?: SupabaseOperation;
       target?: SupabaseTarget;
       supabase_code?: string;
+      diagnostic?: SupabaseRuntimeDiagnostic;
     };
   };
   const code = item?.data?.error ?? item?.statusMessage ?? fallbackCode;
@@ -276,6 +291,61 @@ export function toPublicApiError(error: unknown, fallbackCode = "api_error"): Pu
     operation: item?.data?.operation,
     target: item?.data?.target,
     supabase_code: item?.data?.supabase_code,
+    diagnostic: item?.data?.diagnostic,
+  };
+}
+
+function decodeBase64UrlJson(value: string) {
+  try {
+    const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    return JSON.parse(Buffer.from(padded, "base64").toString("utf8")) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function projectRefFromUrl(value?: string) {
+  if (!value) return undefined;
+  try {
+    const host = new URL(value).host;
+    return host.endsWith(".supabase.co") ? host.split(".")[0] : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function supabaseRuntimeDiagnostic(): SupabaseRuntimeDiagnostic {
+  const supabaseUrl = process.env.SUPABASE_URL?.trim();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const jwtPayload =
+    serviceRoleKey?.split(".").length === 3
+      ? decodeBase64UrlJson(serviceRoleKey.split(".")[1] ?? "")
+      : null;
+
+  let keyKind: SupabaseRuntimeDiagnostic["service_role_key_kind"] = "missing";
+  if (serviceRoleKey?.startsWith("sb_secret_")) keyKind = "sb_secret";
+  else if (serviceRoleKey?.startsWith("sb_publishable_")) keyKind = "sb_publishable";
+  else if (jwtPayload) keyKind = "legacy_jwt";
+  else if (serviceRoleKey) keyKind = "unknown";
+
+  let host: string | undefined;
+  try {
+    host = supabaseUrl ? new URL(supabaseUrl).host : undefined;
+  } catch {
+    host = "invalid_url";
+  }
+
+  return {
+    supabase_url_set: Boolean(supabaseUrl),
+    supabase_url_host: host,
+    supabase_url_project_ref: projectRefFromUrl(supabaseUrl),
+    service_role_key_set: Boolean(serviceRoleKey),
+    service_role_key_length: serviceRoleKey?.length,
+    service_role_key_kind: keyKind,
+    service_role_key_jwt_role: typeof jwtPayload?.role === "string" ? jwtPayload.role : undefined,
+    service_role_key_jwt_ref: typeof jwtPayload?.ref === "string" ? jwtPayload.ref : undefined,
+    service_role_key_jwt_iss: typeof jwtPayload?.iss === "string" ? jwtPayload.iss : undefined,
   };
 }
 

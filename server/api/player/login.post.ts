@@ -22,6 +22,7 @@ export default defineEventHandler(async (event) => {
       operation: publicError.operation,
       target: publicError.target,
       supabase_code: publicError.supabase_code,
+      diagnostic: publicError.diagnostic,
     };
   }
 });

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { classifySupabaseError, toPublicApiError } from "../../server/utils/rocket-api";
+import {
+  classifySupabaseError,
+  supabaseRuntimeDiagnostic,
+  toPublicApiError,
+} from "../../server/utils/rocket-api";
 
 test("classifies missing players table errors", () => {
   assert.deepEqual(
@@ -122,6 +126,7 @@ test("normalizes h3 public errors for JSON responses", () => {
       operation: undefined,
       target: undefined,
       supabase_code: undefined,
+      diagnostic: undefined,
     },
   );
 });
@@ -144,6 +149,34 @@ test("keeps safe Supabase metadata in public error payloads", () => {
       operation: "select",
       target: "players",
       supabase_code: "PGRST301",
+      diagnostic: undefined,
     },
   );
+});
+
+test("reports safe Supabase runtime diagnostics without key material", () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_URL = "https://mclheuqlegtwkkfdtvva.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY =
+    "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwicmVmIjoibWNsaGV1cWxlZ3R3a2tmZHR2dmEiLCJpc3MiOiJzdXBhYmFzZSJ9.signature";
+
+  try {
+    assert.deepEqual(supabaseRuntimeDiagnostic(), {
+      supabase_url_set: true,
+      supabase_url_host: "mclheuqlegtwkkfdtvva.supabase.co",
+      supabase_url_project_ref: "mclheuqlegtwkkfdtvva",
+      service_role_key_set: true,
+      service_role_key_length: 123,
+      service_role_key_kind: "legacy_jwt",
+      service_role_key_jwt_role: "service_role",
+      service_role_key_jwt_ref: "mclheuqlegtwkkfdtvva",
+      service_role_key_jwt_iss: "supabase",
+    });
+  } finally {
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
 });

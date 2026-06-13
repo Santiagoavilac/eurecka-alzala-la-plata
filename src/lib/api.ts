@@ -180,17 +180,24 @@ class ApiClientError extends Error {
   operation?: string;
   target?: string;
   supabaseCode?: string;
+  diagnostic?: Record<string, unknown>;
 
   constructor(
     status: number,
     message: string,
-    details: { operation?: string; target?: string; supabase_code?: string } = {},
+    details: {
+      operation?: string;
+      target?: string;
+      supabase_code?: string;
+      diagnostic?: Record<string, unknown>;
+    } = {},
   ) {
     super(message);
     this.status = status;
     this.operation = details.operation;
     this.target = details.target;
     this.supabaseCode = details.supabase_code;
+    this.diagnostic = details.diagnostic;
   }
 }
 
@@ -200,6 +207,7 @@ export function apiErrorMessage(error: unknown, fallback = "api_error") {
       error.operation ? `operation=${error.operation}` : null,
       error.target ? `target=${error.target}` : null,
       error.supabaseCode ? `supabase_code=${error.supabaseCode}` : null,
+      error.diagnostic ? `diagnostic=${JSON.stringify(error.diagnostic)}` : null,
     ].filter(Boolean);
     return details.length ? `${error.message} (${details.join(", ")})` : error.message;
   }
@@ -226,11 +234,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       operation?: string;
       target?: string;
       supabase_code?: string;
+      diagnostic?: Record<string, unknown>;
     } | null;
     throw new ApiClientError(response.status, body?.error ?? "api_error", {
       operation: body?.operation,
       target: body?.target,
       supabase_code: body?.supabase_code,
+      diagnostic: body?.diagnostic,
     });
   }
 
