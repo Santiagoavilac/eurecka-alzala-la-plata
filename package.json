@@ -10,7 +10,7 @@
     "api:start": "tsx api/server.ts",
     "api:build": "tsc -p tsconfig.api.json",
     "api:test": "node --import tsx --test \"api/**/*.test.ts\"",
-    "build": "vite build",
+    "build": "vite build && node scripts/verify-vercel-output.mjs",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
