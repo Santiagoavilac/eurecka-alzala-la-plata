@@ -38,6 +38,7 @@ export function RocketGamePanel({
   const attemptIdRef = useRef<string | null>(null);
   const pollRef = useRef<number | null>(null);
   const animationRef = useRef<number | null>(null);
+  const musicRef = useRef<HTMLAudioElement | null>(null);
   const startedAtMsRef = useRef<number | null>(null);
   const serverClockOffsetMsRef = useRef(0);
 
@@ -45,6 +46,7 @@ export function RocketGamePanel({
     () => () => {
       stopPolling();
       stopAnimation();
+      stopMusic();
     },
     [],
   );
@@ -63,6 +65,23 @@ export function RocketGamePanel({
       window.cancelAnimationFrame(animationRef.current);
       animationRef.current = null;
     }
+  }
+
+  function startMusic() {
+    if (!musicRef.current) {
+      const music = new Audio("/audio/mas-money-mas-cash.mp3");
+      music.loop = true;
+      music.volume = 1;
+      musicRef.current = music;
+    }
+
+    void musicRef.current.play().catch(() => undefined);
+  }
+
+  function stopMusic() {
+    if (!musicRef.current) return;
+    musicRef.current.pause();
+    musicRef.current.currentTime = 0;
   }
 
   function syncAttemptClock(startedAt: string, serverTime?: string) {
@@ -150,6 +169,7 @@ export function RocketGamePanel({
 
   async function handleStart() {
     try {
+      startMusic();
       setError(null);
       setResult(null);
       setMultiplier(1.0);
