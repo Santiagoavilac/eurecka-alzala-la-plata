@@ -1,6 +1,8 @@
 const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? "http://localhost:4000" : "")
+  import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? "http://localhost:4000/api" : "/api")
 ).replace(/\/$/, "");
+
+const PLAYER_ID_STORAGE_KEY = "eureka_player_id";
 
 export type AttemptStatus = "playing" | "cashed_out" | "crashed" | "expired" | "invalidated";
 
@@ -183,13 +185,12 @@ class ApiClientError extends Error {
 }
 
 function apiUrl(path: string) {
-  return `${API_BASE_URL}${path}`;
+  return `${API_BASE_URL}/${path.replace(/^\/+/, "")}`;
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(apiUrl(path), {
     ...options,
-    credentials: "include",
     headers: {
       "content-type": "application/json",
       ...options.headers,
@@ -217,8 +218,24 @@ function mapPlayerPayload(payload: PlayerApiPayload): PlayerStatus {
   };
 }
 
+function getStoredPlayerId() {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(PLAYER_ID_STORAGE_KEY);
+}
+
+function setStoredPlayerId(playerId: string) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(PLAYER_ID_STORAGE_KEY, playerId);
+}
+
+function requireStoredPlayerId() {
+  const playerId = getStoredPlayerId();
+  if (!playerId) throw new ApiClientError(401, "player_id_missing");
+  return playerId;
+}
+
 export async function loginPlayer(input: LoginInput): Promise<PlayerStatus> {
-  const payload = await request<PlayerApiPayload>("/api/player/login", {
+  const payload = await request<PlayerApiPayload>("player/login", {
     method: "POST",
     body: JSON.stringify({
       full_name: input.fullName,
@@ -226,12 +243,19 @@ export async function loginPlayer(input: LoginInput): Promise<PlayerStatus> {
       ...(input.documentId ? { document_id: input.documentId } : {}),
     }),
   });
-  return mapPlayerPayload(payload);
+  const player = mapPlayerPayload(payload);
+  setStoredPlayerId(player.id);
+  return player;
 }
 
 export async function getPlayerStatus(): Promise<PlayerStatus | null> {
+  const playerId = getStoredPlayerId();
+  if (!playerId) return null;
+
   try {
-    const payload = await request<PlayerApiPayload>("/api/player/me");
+    const payload = await request<PlayerApiPayload>(
+      `player/me?player_id=${encodeURIComponent(playerId)}`,
+    );
     return mapPlayerPayload(payload);
   } catch (error) {
     if (error instanceof ApiClientError && error.status === 401) return null;
@@ -240,9 +264,9 @@ export async function getPlayerStatus(): Promise<PlayerStatus | null> {
 }
 
 export async function startRocketAttempt(): Promise<StartRocketResponse> {
-  const payload = await request<StartRocketApiPayload>("/api/rocket/start", {
+  const payload = await request<StartRocketApiPayload>("rocket/start", {
     method: "POST",
-    body: "{}",
+    body: JSON.stringify({ player_id: requireStoredPlayerId() }),
   });
   return {
     attemptId: payload.attempt_id,
@@ -254,7 +278,9 @@ export async function startRocketAttempt(): Promise<StartRocketResponse> {
 }
 
 export async function getRocketState(attemptId: string): Promise<RocketState> {
-  const payload = await request<RocketStateApiPayload>(`/api/rocket/state/${attemptId}`);
+  const payload = await request<RocketStateApiPayload>(
+    `rocket/state/${attemptId}?player_id=${encodeURIComponent(requireStoredPlayerId())}`,
+  );
   return {
     attemptId: payload.attempt_id,
     status: payload.status,
@@ -268,9 +294,9 @@ export async function getRocketState(attemptId: string): Promise<RocketState> {
 }
 
 export async function cashOutRocketAttempt(attemptId: string): Promise<RocketAttemptResult> {
-  const payload = await request<RocketResultApiPayload>("/api/rocket/cashout", {
+  const payload = await request<RocketResultApiPayload>("rocket/cashout", {
     method: "POST",
-    body: JSON.stringify({ attempt_id: attemptId }),
+    body: JSON.stringify({ attempt_id: attemptId, player_id: requireStoredPlayerId() }),
   });
   return {
     attemptId: payload.attempt_id,
@@ -289,7 +315,7 @@ export async function cashOutRocketAttempt(attemptId: string): Promise<RocketAtt
 }
 
 export async function getLeaderboard(limit = 10): Promise<LeaderboardEntry[]> {
-  const rows = await request<LeaderboardApiRow[]>(`/api/leaderboard?limit=${limit}`);
+  const rows = await request<LeaderboardApiRow[]>(`leaderboard?limit=${limit}`);
   return rows.map((row) => ({
     rank: row.rank,
     player: row.full_name,
@@ -301,16 +327,14 @@ export async function getLeaderboard(limit = 10): Promise<LeaderboardEntry[]> {
 }
 
 export async function adminLogin(pin: string): Promise<void> {
-  await request<{ ok: true }>("/api/admin/login", {
+  await request<{ ok: true }>("admin/login", {
     method: "POST",
     body: JSON.stringify({ pin }),
   });
 }
 
 export async function getAdminPlayers(): Promise<AdminParticipant[]> {
-  const payload = await request<DataTableResponse<AdminPlayerApiRow>>(
-    "/api/admin/players?pageSize=100",
-  );
+  const payload = await request<DataTableResponse<AdminPlayerApiRow>>("admin/players?pageSize=100");
   return payload.rows.map((row) => ({
     id: row.id,
     name: row.full_name,
@@ -325,7 +349,7 @@ export async function getAdminPlayers(): Promise<AdminParticipant[]> {
 
 export async function getAdminAttempts(): Promise<AdminAttempt[]> {
   const payload = await request<DataTableResponse<AdminAttemptApiRow>>(
-    "/api/admin/attempts?pageSize=100",
+    "admin/attempts?pageSize=100",
   );
   return payload.rows.map((row) => ({
     id: row.id,
@@ -340,7 +364,7 @@ export async function getAdminAttempts(): Promise<AdminAttempt[]> {
 
 export async function getAdminLeaderboard(): Promise<LeaderboardEntry[]> {
   const payload = await request<DataTableResponse<LeaderboardApiRow>>(
-    "/api/admin/leaderboard?pageSize=50",
+    "admin/leaderboard?pageSize=50",
   );
   return payload.rows.map((row) => ({
     rank: row.rank,
@@ -354,7 +378,7 @@ export async function getAdminLeaderboard(): Promise<LeaderboardEntry[]> {
 
 export async function getAdminAuditLogs(): Promise<AdminAuditLog[]> {
   const payload = await request<DataTableResponse<AdminAuditLogApiRow>>(
-    "/api/admin/audit-logs?pageSize=100",
+    "admin/audit-logs?pageSize=100",
   );
   return payload.rows.map((row) => ({
     player: row.player?.full_name ?? "Sistema",
@@ -371,7 +395,7 @@ export async function getAdminAuditLogs(): Promise<AdminAuditLog[]> {
 }
 
 export async function invalidateAttempt(attemptId: string, reason: string): Promise<void> {
-  await request("/api/admin/invalidate-attempt", {
+  await request("admin/invalidate-attempt", {
     method: "POST",
     body: JSON.stringify({ attempt_id: attemptId, reason }),
   });

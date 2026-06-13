@@ -1,0 +1,384 @@
+import { createClient } from "@supabase/supabase-js";
+import { createError } from "h3";
+
+import {
+  calculateMultiplier,
+  crashPointFromSeed,
+  generateServerSeed,
+  hashServerSeed,
+  maskPhone,
+  resolvePlayerIdentity,
+} from "../../api/game/game";
+
+const MAX_ATTEMPTS = 3;
+const MAX_PLAYING_MS = 120_000;
+
+type AttemptStatus = "playing" | "cashed_out" | "crashed" | "expired" | "invalidated";
+
+type Player = {
+  id: string;
+  full_name: string;
+  phone: string;
+  document_id: string;
+  phone_normalized: string;
+  document_normalized: string;
+  created_at: string;
+  status: "active" | "blocked";
+};
+
+type RocketAttempt = {
+  id: string;
+  player_id: string;
+  attempt_number: number;
+  status: AttemptStatus;
+  server_seed_hash: string;
+  server_seed: string | null;
+  crash_point: number | string;
+  started_at: string;
+  ended_at: string | null;
+  cashed_out_at: number | string | null;
+  score: number;
+  created_at: string;
+};
+
+type LeaderboardRow = {
+  player_id: string;
+  score: number;
+  cashed_out_at: number | string | null;
+  ended_at: string | null;
+  created_at: string;
+  players?:
+    | { full_name?: string; phone?: string }
+    | { full_name?: string; phone?: string }[]
+    | null;
+};
+
+let supabase: ReturnType<typeof createClient> | null = null;
+
+export function db() {
+  if (supabase) return supabase;
+
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw createError({
+      statusCode: 500,
+      statusMessage: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY",
+    });
+  }
+
+  supabase = createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+  return supabase;
+}
+
+export function requireString(value: unknown, name: string) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw createError({ statusCode: 400, statusMessage: `${name}_required` });
+  }
+  return value.trim();
+}
+
+function publicPlayer(player: Player) {
+  return {
+    id: player.id,
+    full_name: player.full_name,
+    phone: player.phone,
+    document_id: player.document_id,
+    status: player.status,
+    created_at: player.created_at,
+  };
+}
+
+export async function getPlayerStats(playerId: string) {
+  const result = await db()
+    .from("rocket_attempts")
+    .select("score, cashed_out_at", { count: "exact" })
+    .eq("player_id", playerId);
+
+  if (result.error) throw result.error;
+
+  const attempts = (result.data ?? []) as Pick<RocketAttempt, "score" | "cashed_out_at">[];
+  const best = attempts.reduce(
+    (acc, attempt) => {
+      const score = Number(attempt.score ?? 0);
+      const multiplier = attempt.cashed_out_at == null ? 0 : Number(attempt.cashed_out_at);
+      return score > acc.best_score ? { best_score: score, best_multiplier: multiplier } : acc;
+    },
+    { best_score: 0, best_multiplier: 0 },
+  );
+
+  const attemptsUsed = result.count ?? attempts.length;
+  return {
+    attempts_used: attemptsUsed,
+    attempts_left: Math.max(0, MAX_ATTEMPTS - attemptsUsed),
+    ...best,
+  };
+}
+
+export async function playerPayload(player: Player) {
+  return {
+    player: publicPlayer(player),
+    ...(await getPlayerStats(player.id)),
+  };
+}
+
+export async function getPlayer(playerId: string) {
+  const result = await db().from("players").select("*").eq("id", playerId).maybeSingle();
+  if (result.error) throw result.error;
+  const player = result.data as Player | null;
+  if (!player || player.status !== "active") {
+    throw createError({ statusCode: 404, statusMessage: "player_not_found" });
+  }
+  return player;
+}
+
+export async function loginOrCreatePlayer(fullName: string, phone: string) {
+  const identity = resolvePlayerIdentity({ phone });
+  if (identity.phoneNormalized.length < 6) {
+    throw createError({ statusCode: 400, statusMessage: "phone_invalid" });
+  }
+
+  const existing = await db()
+    .from("players")
+    .select("*")
+    .eq("phone_normalized", identity.phoneNormalized)
+    .eq("document_normalized", identity.documentNormalized)
+    .maybeSingle();
+  if (existing.error) throw existing.error;
+
+  if (!existing.data) {
+    const created = await db()
+      .from("players")
+      .insert({
+        full_name: fullName,
+        phone,
+        document_id: identity.documentId,
+        phone_normalized: identity.phoneNormalized,
+        document_normalized: identity.documentNormalized,
+        last_login_at: new Date().toISOString(),
+      })
+      .select("*")
+      .single();
+    if (created.error) throw created.error;
+    return created.data as Player;
+  }
+
+  const player = existing.data as Player;
+  if (player.status !== "active") {
+    throw createError({ statusCode: 403, statusMessage: "player_not_active" });
+  }
+
+  const updated = await db()
+    .from("players")
+    .update({
+      full_name: fullName,
+      phone,
+      document_id: identity.documentId,
+      last_login_at: new Date().toISOString(),
+    })
+    .eq("id", player.id)
+    .select("*")
+    .single();
+  if (updated.error) throw updated.error;
+  return updated.data as Player;
+}
+
+async function findPlayingAttempt(playerId: string) {
+  const result = await db()
+    .from("rocket_attempts")
+    .select("*")
+    .eq("player_id", playerId)
+    .eq("status", "playing")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (result.error) throw result.error;
+  return result.data as RocketAttempt | null;
+}
+
+export async function maybeFinishAttempt(attempt: RocketAttempt) {
+  if (attempt.status !== "playing") return attempt;
+
+  const elapsedMs = Date.now() - new Date(attempt.started_at).getTime();
+  const current = calculateMultiplier(elapsedMs);
+  const crashPoint = Number(attempt.crash_point);
+
+  if (elapsedMs > MAX_PLAYING_MS) {
+    const result = await db()
+      .from("rocket_attempts")
+      .update({ status: "expired", ended_at: new Date().toISOString(), score: 0 })
+      .eq("id", attempt.id)
+      .select("*")
+      .single();
+    if (result.error) throw result.error;
+    return result.data as RocketAttempt;
+  }
+
+  if (current >= crashPoint) {
+    const result = await db()
+      .from("rocket_attempts")
+      .update({ status: "crashed", ended_at: new Date().toISOString(), score: 0 })
+      .eq("id", attempt.id)
+      .select("*")
+      .single();
+    if (result.error) throw result.error;
+    return result.data as RocketAttempt;
+  }
+
+  return attempt;
+}
+
+export async function startAttempt(playerId: string) {
+  const player = await getPlayer(playerId);
+  const playing = await findPlayingAttempt(player.id);
+  if (playing) {
+    const current = await maybeFinishAttempt(playing);
+    if (current.status === "playing") {
+      return playingAttemptPayload(current, Math.max(0, MAX_ATTEMPTS - current.attempt_number));
+    }
+  }
+
+  const stats = await getPlayerStats(player.id);
+  if (stats.attempts_used >= MAX_ATTEMPTS) {
+    throw createError({ statusCode: 409, statusMessage: "attempt_limit_reached" });
+  }
+
+  const attemptNumber = stats.attempts_used + 1;
+  const serverSeed = generateServerSeed();
+  const startedAt = new Date().toISOString();
+  const created = await db()
+    .from("rocket_attempts")
+    .insert({
+      player_id: player.id,
+      attempt_number: attemptNumber,
+      status: "playing",
+      server_seed_hash: hashServerSeed(serverSeed),
+      server_seed: serverSeed,
+      crash_point: crashPointFromSeed(`${serverSeed}:${player.id}:${attemptNumber}`),
+      started_at: startedAt,
+    })
+    .select("*")
+    .single();
+
+  if (created.error) {
+    const concurrent = await findPlayingAttempt(player.id);
+    if (concurrent) {
+      return playingAttemptPayload(
+        concurrent,
+        Math.max(0, MAX_ATTEMPTS - concurrent.attempt_number),
+      );
+    }
+    throw created.error;
+  }
+
+  return playingAttemptPayload(
+    created.data as RocketAttempt,
+    Math.max(0, MAX_ATTEMPTS - attemptNumber),
+  );
+}
+
+export async function getAttempt(attemptId: string, playerId: string) {
+  const result = await db()
+    .from("rocket_attempts")
+    .select("*")
+    .eq("id", attemptId)
+    .eq("player_id", playerId)
+    .maybeSingle();
+  if (result.error) throw result.error;
+  if (!result.data) throw createError({ statusCode: 404, statusMessage: "attempt_not_found" });
+  return result.data as RocketAttempt;
+}
+
+export function playingAttemptPayload(attempt: RocketAttempt, attemptsLeftAfterStart: number) {
+  return {
+    attempt_id: attempt.id,
+    attempt_number: attempt.attempt_number,
+    server_time: new Date().toISOString(),
+    started_at: attempt.started_at,
+    server_seed_hash: attempt.server_seed_hash,
+    attempts_left_after_start: attemptsLeftAfterStart,
+  };
+}
+
+export function attemptStatePayload(attempt: RocketAttempt) {
+  if (attempt.status === "playing") {
+    return {
+      attempt_id: attempt.id,
+      status: "playing",
+      current_multiplier: calculateMultiplier(Date.now() - new Date(attempt.started_at).getTime()),
+      server_time: new Date().toISOString(),
+    };
+  }
+
+  return {
+    attempt_id: attempt.id,
+    status: attempt.status,
+    cashed_out_at: attempt.cashed_out_at == null ? null : Number(attempt.cashed_out_at),
+    score: attempt.score,
+    crash_point: Number(attempt.crash_point),
+    server_seed: attempt.server_seed,
+    ended_at: attempt.ended_at,
+  };
+}
+
+export async function cashOutAttempt(attemptId: string, playerId: string) {
+  const result = await db().rpc("cash_out_rocket_attempt", {
+    p_attempt_id: attemptId,
+    p_player_id: playerId,
+  });
+
+  if (result.error) {
+    if (result.error.message.includes("attempt_not_found")) {
+      throw createError({ statusCode: 404, statusMessage: "attempt_not_found" });
+    }
+    throw result.error;
+  }
+
+  const row = Array.isArray(result.data) ? result.data[0] : result.data;
+  return {
+    attempt_id: row.attempt_id,
+    status: row.status,
+    current_multiplier: row.current_multiplier == null ? null : Number(row.current_multiplier),
+    cashed_out_at: row.cashed_out_at == null ? null : Number(row.cashed_out_at),
+    score: row.score,
+    crash_point: row.crash_point == null ? null : Number(row.crash_point),
+    server_seed: row.server_seed,
+    ended_at: row.ended_at,
+    ...(await getPlayerStats(playerId)),
+  };
+}
+
+export async function leaderboard(limit: number) {
+  const result = await db()
+    .from("rocket_attempts")
+    .select("player_id, score, cashed_out_at, ended_at, created_at, players(full_name, phone)")
+    .eq("status", "cashed_out")
+    .gt("score", 0)
+    .order("score", { ascending: false })
+    .limit(Math.max(limit * 5, limit));
+
+  if (result.error) throw result.error;
+
+  const bestByPlayer = new Map<string, LeaderboardRow>();
+  for (const row of (result.data ?? []) as LeaderboardRow[]) {
+    if (!bestByPlayer.has(row.player_id)) bestByPlayer.set(row.player_id, row);
+  }
+
+  return [...bestByPlayer.values()].slice(0, limit).map((row, index) => {
+    const player = Array.isArray(row.players) ? row.players[0] : row.players;
+    return {
+      rank: index + 1,
+      full_name: player?.full_name ?? "Jugador",
+      masked_phone: maskPhone(player?.phone ?? ""),
+      best_multiplier: Number(row.cashed_out_at ?? 0),
+      best_score: Number(row.score ?? 0),
+      created_at: row.ended_at ?? row.created_at,
+    };
+  });
+}

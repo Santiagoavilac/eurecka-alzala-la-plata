@@ -117,7 +117,30 @@ function signedCookie(req: Request) {
   return typeof value === "string" ? value : null;
 }
 
+function requestPlayerId(req: Request) {
+  const bodyPlayerId =
+    req.body && typeof req.body === "object"
+      ? (req.body as Record<string, unknown>).player_id
+      : undefined;
+  const queryPlayerId = req.query.player_id;
+  const value = bodyPlayerId ?? queryPlayerId;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 function requirePlayer(req: Request, _res: Response, next: NextFunction) {
+  const playerId = requestPlayerId(req);
+  if (playerId) {
+    const player = players.get(playerId);
+    if (!player || player.status !== "active") {
+      next(Object.assign(new Error("player_not_active"), { status: 403 }));
+      return;
+    }
+
+    (req as Request & { player: Player }).player = player;
+    next();
+    return;
+  }
+
   const token = signedCookie(req);
   if (!token) {
     next(Object.assign(new Error("missing_session"), { status: 401 }));
