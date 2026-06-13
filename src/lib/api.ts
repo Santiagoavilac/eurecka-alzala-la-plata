@@ -321,7 +321,9 @@ export async function startRocketAttempt(): Promise<StartRocketResponse> {
 
 export async function getRocketState(attemptId: string): Promise<RocketState> {
   const payload = await request<RocketStateApiPayload>(
-    `rocket/state/${attemptId}?player_id=${encodeURIComponent(requireStoredPlayerId())}`,
+    `rocket/state?attempt_id=${encodeURIComponent(attemptId)}&player_id=${encodeURIComponent(
+      requireStoredPlayerId(),
+    )}`,
   );
   return {
     attemptId: payload.attempt_id,

@@ -87,9 +87,10 @@ export function RocketGamePanel({
           );
         }
       } catch {
+        stopPolling();
         setError("No pudimos actualizar el intento.");
       }
-    }, 150);
+    }, 500);
   }
 
   async function handleStart() {
