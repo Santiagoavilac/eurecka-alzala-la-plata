@@ -4,7 +4,7 @@ import type { PlayerStatus } from "@/lib/api";
 
 export function PlayerHeader({
   player,
-  attemptsLimit = 3,
+  attemptsLimit = 5,
 }: {
   player: PlayerStatus | null;
   attemptsLimit?: number;

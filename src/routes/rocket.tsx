@@ -61,7 +61,7 @@ function RocketPage() {
         </div>
 
         <p className="mt-8 text-center text-[11px] leading-relaxed text-muted-foreground">
-          Eureka Rocket es una dinámica promocional gratuita. Máximo 3 intentos por persona. La
+          Eureka Rocket es una dinámica promocional gratuita. Máximo 5 intentos por persona. La
           organización puede invalidar participaciones duplicadas o sospechosas.
         </p>
       </main>

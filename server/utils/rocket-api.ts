@@ -10,7 +10,7 @@ import {
   resolvePlayerIdentity,
 } from "../../api/game/game";
 
-const MAX_ATTEMPTS = 3;
+const MAX_ATTEMPTS = 5;
 const MAX_PLAYING_MS = 120_000;
 
 type AttemptStatus = "playing" | "cashed_out" | "crashed" | "expired" | "invalidated";

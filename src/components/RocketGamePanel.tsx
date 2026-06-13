@@ -6,6 +6,7 @@ import {
   cashOutRocketAttempt,
   getPlayerStatus,
   getRocketState,
+  PLAYER_ATTEMPT_LIMIT,
   startRocketAttempt,
   type PlayerStatus,
   type RocketState,
@@ -52,7 +53,8 @@ export function RocketGamePanel({
     [],
   );
 
-  const noAttemptsLeft = player.attemptsUsed >= 3;
+  const attemptsLimit = player.attemptsLimit || PLAYER_ATTEMPT_LIMIT;
+  const noAttemptsLeft = player.attemptsUsed >= attemptsLimit;
 
   function stopPolling() {
     if (pollRef.current) {
@@ -123,7 +125,7 @@ export function RocketGamePanel({
     setResult({
       multiplier: terminalMultiplier || 1,
       score: next.score ?? 0,
-      attemptsRemaining: Math.max(0, 3 - player.attemptsUsed),
+      attemptsRemaining: Math.max(0, attemptsLimit - player.attemptsUsed),
     });
   }
 
@@ -157,7 +159,10 @@ export function RocketGamePanel({
         if (fresh) {
           setResult((current) =>
             current
-              ? { ...current, attemptsRemaining: Math.max(0, 3 - fresh.attemptsUsed) }
+              ? {
+                  ...current,
+                  attemptsRemaining: Math.max(0, fresh.attemptsLimit - fresh.attemptsUsed),
+                }
               : current,
           );
         }
@@ -185,7 +190,10 @@ export function RocketGamePanel({
       if (fresh) {
         setResult((current) =>
           current
-            ? { ...current, attemptsRemaining: Math.max(0, 3 - fresh.attemptsUsed) }
+            ? {
+                ...current,
+                attemptsRemaining: Math.max(0, fresh.attemptsLimit - fresh.attemptsUsed),
+              }
             : current,
         );
       }

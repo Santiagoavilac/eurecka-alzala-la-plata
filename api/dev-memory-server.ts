@@ -16,7 +16,7 @@ import {
 } from "./game/game";
 
 const COOKIE_NAME = "eureka_session";
-const MAX_ATTEMPTS = 3;
+const MAX_ATTEMPTS = 5;
 const MAX_PLAYING_MS = 120_000;
 const CASHOUT_BACKDATE_LIMIT_MS = 1500;
 

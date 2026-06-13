@@ -36,7 +36,7 @@ function ParticipantesPage() {
       key: "attemptsUsed",
       header: "Intentos",
       sortable: true,
-      render: (r) => <span className="neon-text font-black">{r.attemptsUsed}/3</span>,
+      render: (r) => <span className="neon-text font-black">{r.attemptsUsed}/5</span>,
     },
     {
       key: "bestScore",

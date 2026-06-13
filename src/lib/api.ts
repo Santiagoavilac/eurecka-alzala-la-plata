@@ -3,6 +3,7 @@ const API_BASE_URL = (
 ).replace(/\/$/, "");
 
 const PLAYER_ID_STORAGE_KEY = "eureka_player_id";
+export const PLAYER_ATTEMPT_LIMIT = 5;
 
 export type AttemptStatus = "playing" | "cashed_out" | "crashed" | "expired" | "invalidated";
 
@@ -260,7 +261,7 @@ function mapPlayerPayload(payload: PlayerApiPayload): PlayerStatus {
     phone: payload.player.phone,
     documentId: payload.player.document_id,
     attemptsUsed: payload.attempts_used,
-    attemptsLimit: 3,
+    attemptsLimit: PLAYER_ATTEMPT_LIMIT,
     bestScore: payload.best_score,
     bestMultiplier: payload.best_multiplier,
   };

@@ -30,9 +30,10 @@ test("migration creates required game tables with RLS enabled", () => {
 
 test("migration enforces player uniqueness, attempt limit, and valid statuses", () => {
   const sql = readRocketMigration();
+  const allSql = readAllMigrations();
 
   assert.match(sql, /unique \(phone_normalized, document_normalized\)/);
-  assert.match(sql, /attempt_number between 1 and 3/);
+  assert.match(allSql, /attempt_number between 1 and 5/);
   assert.match(sql, /status in \('playing', 'cashed_out', 'crashed', 'expired', 'invalidated'\)/);
 });
 

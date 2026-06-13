@@ -79,7 +79,7 @@ function EntrarPage() {
           {error && <p className="text-center text-xs font-bold text-destructive">{error}</p>}
 
           <p className="text-center text-[11px] uppercase tracking-widest text-muted-foreground">
-            Sin contraseña · Sin depósito · 3 intentos
+            Sin contraseña · Sin depósito · 5 intentos
           </p>
         </form>
       </main>

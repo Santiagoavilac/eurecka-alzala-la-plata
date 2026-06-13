@@ -24,7 +24,7 @@ import {
 const PLAYER_COOKIE = "eureka_session";
 const ADMIN_COOKIE = "eureka_admin";
 const SESSION_DAYS = 7;
-const MAX_ATTEMPTS = 3;
+const MAX_ATTEMPTS = 5;
 const MAX_PLAYING_MS = 120_000;
 
 type Db = SupabaseClient;

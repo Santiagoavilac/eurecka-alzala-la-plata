@@ -9,7 +9,7 @@ export const Route = createFileRoute("/")({
       { title: "Eureka Rocket — Jugá gratis y retirate antes de que explote" },
       {
         name: "description",
-        content: "Dinámica promocional gratuita de Eureka. 3 intentos por persona. Sin depósito.",
+        content: "Dinámica promocional gratuita de Eureka. 5 intentos por persona. Sin depósito.",
       },
       { property: "og:title", content: "Eureka Rocket — Jugá gratis" },
       { property: "og:description", content: "Participá en Eureka Rocket y competí por premios." },
@@ -52,7 +52,7 @@ function Landing() {
 
           <p className="mt-6 max-w-md text-sm text-muted-foreground sm:text-base">
             Participá en <span className="font-bold text-foreground">Eureka Rocket</span> y competí
-            por premios. Máximo 3 intentos por persona.
+            por premios. Máximo 5 intentos por persona.
           </p>
 
           <Button
@@ -64,7 +64,7 @@ function Landing() {
           </Button>
 
           <p className="mt-4 text-[11px] uppercase tracking-widest text-muted-foreground">
-            +18 · Sin depósito · Máximo 3 intentos · Aplican condiciones
+            +18 · Sin depósito · Máximo 5 intentos · Aplican condiciones
           </p>
         </section>
 
@@ -90,7 +90,7 @@ function Landing() {
 
         <footer className="mt-20 border-t border-border py-8 text-center text-[11px] leading-relaxed text-muted-foreground">
           <p className="mx-auto max-w-2xl">
-            Eureka Rocket es una dinámica promocional gratuita. No requiere depósito. Máximo 3
+            Eureka Rocket es una dinámica promocional gratuita. No requiere depósito. Máximo 5
             intentos por persona. La organización puede invalidar participaciones duplicadas,
             fraudulentas o sospechosas.
           </p>
