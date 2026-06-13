@@ -35,6 +35,7 @@ export function RocketGamePanel({
   const [multiplier, setMultiplier] = useState(1.0);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cashoutPending, setCashoutPending] = useState(false);
   const attemptIdRef = useRef<string | null>(null);
   const pollRef = useRef<number | null>(null);
   const animationRef = useRef<number | null>(null);
@@ -171,6 +172,7 @@ export function RocketGamePanel({
     try {
       startMusic();
       setError(null);
+      setCashoutPending(false);
       setResult(null);
       setMultiplier(1.0);
       const attempt = await startRocketAttempt();
@@ -193,15 +195,23 @@ export function RocketGamePanel({
   }
 
   async function handleCashout() {
-    if (!attemptIdRef.current) return;
+    if (!attemptIdRef.current || cashoutPending) return;
+    const startedAtMs = startedAtMsRef.current;
+    const serverNowMs = Date.now() + serverClockOffsetMsRef.current;
+    const requestedAt = new Date(serverNowMs).toISOString();
+    const clickedMultiplier =
+      startedAtMs == null ? multiplier : calculateDisplayMultiplier(serverNowMs - startedAtMs);
     try {
       setError(null);
+      setCashoutPending(true);
       stopPolling();
       stopAnimation();
-      const res = await cashOutRocketAttempt(attemptIdRef.current);
-      const cashedMultiplier = res.cashedOutAt ?? res.currentMultiplier ?? multiplier;
+      setMultiplier(clickedMultiplier);
+      const res = await cashOutRocketAttempt(attemptIdRef.current, requestedAt);
+      const cashedMultiplier = res.cashedOutAt ?? res.currentMultiplier ?? clickedMultiplier;
       setState(res.status === "crashed" ? "exploded" : "cashed_out");
       setMultiplier(cashedMultiplier || 1);
+      setCashoutPending(false);
       setResult({
         multiplier: cashedMultiplier || 1,
         score: res.score ?? 0,
@@ -214,6 +224,7 @@ export function RocketGamePanel({
         bestMultiplier: res.bestMultiplier,
       });
     } catch {
+      setCashoutPending(false);
       setError("No pudimos registrar el retiro.");
       startMultiplierAnimation();
       startServerPolling(attemptIdRef.current);
@@ -223,6 +234,7 @@ export function RocketGamePanel({
   function handleReset() {
     stopPolling();
     stopAnimation();
+    setCashoutPending(false);
     setState("idle");
     setMultiplier(1.0);
     setResult(null);
@@ -316,9 +328,10 @@ export function RocketGamePanel({
           <Button
             size="lg"
             onClick={handleCashout}
+            disabled={cashoutPending}
             className="h-14 w-full animate-pulse-glow text-base font-black uppercase tracking-widest"
           >
-            Retirarme · {multiplier.toFixed(2)}x
+            {cashoutPending ? "Registrando retiro…" : `Retirarme · ${multiplier.toFixed(2)}x`}
           </Button>
         )}
         {(state === "cashed_out" || state === "exploded") && (

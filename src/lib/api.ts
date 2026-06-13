@@ -346,10 +346,17 @@ export async function getRocketState(attemptId: string): Promise<RocketState> {
   };
 }
 
-export async function cashOutRocketAttempt(attemptId: string): Promise<RocketAttemptResult> {
+export async function cashOutRocketAttempt(
+  attemptId: string,
+  cashoutRequestedAt?: string,
+): Promise<RocketAttemptResult> {
   const payload = await request<RocketResultApiPayload>("rocket/cashout", {
     method: "POST",
-    body: JSON.stringify({ attempt_id: attemptId, player_id: requireStoredPlayerId() }),
+    body: JSON.stringify({
+      attempt_id: attemptId,
+      player_id: requireStoredPlayerId(),
+      ...(cashoutRequestedAt ? { cashout_requested_at: cashoutRequestedAt } : {}),
+    }),
   });
   return {
     attemptId: payload.attempt_id,

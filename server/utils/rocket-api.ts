@@ -114,6 +114,7 @@ type Database = {
         Args: {
           p_attempt_id: string;
           p_player_id: string;
+          p_cashout_requested_at?: string | null;
         };
         Returns: CashOutRocketAttemptRow[];
       };
@@ -270,6 +271,16 @@ export function throwSupabaseApiError(
     diagnostic:
       publicError.code === "supabase_invalid_key" ? supabaseRuntimeDiagnostic() : undefined,
   });
+}
+
+function shouldRetryLegacyCashoutRpc(error: unknown) {
+  const text = supabaseErrorText(error);
+  const code = (error as SupabaseErrorLike)?.code;
+  return (
+    code === "PGRST202" ||
+    code === "42883" ||
+    (text.includes("cash_out_rocket_attempt") && text.includes("p_cashout_requested_at"))
+  );
 }
 
 export function toPublicApiError(error: unknown, fallbackCode = "api_error"): PublicApiError {
@@ -619,11 +630,23 @@ export function attemptStatePayload(attempt: RocketAttempt) {
   };
 }
 
-export async function cashOutAttempt(attemptId: string, playerId: string) {
-  const result = await db().rpc("cash_out_rocket_attempt", {
+export async function cashOutAttempt(
+  attemptId: string,
+  playerId: string,
+  cashoutRequestedAt?: string,
+) {
+  let result = await db().rpc("cash_out_rocket_attempt", {
     p_attempt_id: attemptId,
     p_player_id: playerId,
+    p_cashout_requested_at: cashoutRequestedAt ?? null,
   });
+
+  if (result.error && shouldRetryLegacyCashoutRpc(result.error)) {
+    result = await db().rpc("cash_out_rocket_attempt", {
+      p_attempt_id: attemptId,
+      p_player_id: playerId,
+    });
+  }
 
   if (result.error) {
     if (result.error.message.includes("attempt_not_found")) {

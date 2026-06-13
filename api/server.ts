@@ -492,6 +492,19 @@ async function leaderboardRows(db: Db, limit: number) {
   });
 }
 
+function shouldRetryLegacyCashoutRpc(error: unknown) {
+  const item = error as { code?: string; message?: string; details?: string; hint?: string };
+  const text = [item?.code, item?.message, item?.details, item?.hint]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return (
+    item?.code === "PGRST202" ||
+    item?.code === "42883" ||
+    (text.includes("cash_out_rocket_attempt") && text.includes("p_cashout_requested_at"))
+  );
+}
+
 function datatablePayload<T>({
   rows,
   total,
@@ -711,11 +724,23 @@ export function createApp(config = loadConfig(), db = createSupabase(config)) {
         const player = req.auth!.player;
         assertNoClientGameResult(req.body, req, db, player.id);
         const attemptId = parseRequiredString(req.body, "attempt_id");
+        const cashoutRequestedAt = parseOptionalString(req.body, "cashout_requested_at");
+        if (cashoutRequestedAt && Number.isNaN(Date.parse(cashoutRequestedAt))) {
+          throw new ApiError(400, "cashout_requested_at_invalid");
+        }
 
-        const result = await db.rpc("cash_out_rocket_attempt", {
+        let result = await db.rpc("cash_out_rocket_attempt", {
           p_attempt_id: attemptId,
           p_player_id: player.id,
+          p_cashout_requested_at: cashoutRequestedAt ?? null,
         });
+
+        if (result.error && shouldRetryLegacyCashoutRpc(result.error)) {
+          result = await db.rpc("cash_out_rocket_attempt", {
+            p_attempt_id: attemptId,
+            p_player_id: player.id,
+          });
+        }
 
         if (result.error) {
           if (result.error.message.includes("attempt_not_found"))

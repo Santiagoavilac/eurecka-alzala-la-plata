@@ -10,6 +10,14 @@ function readRocketMigration() {
   return readFileSync(join(dir, file), "utf8").toLowerCase();
 }
 
+function readAllMigrations() {
+  const dir = join(process.cwd(), "supabase", "migrations");
+  return readdirSync(dir)
+    .filter((name) => name.endsWith(".sql"))
+    .map((name) => readFileSync(join(dir, name), "utf8").toLowerCase())
+    .join("\n");
+}
+
 test("migration creates required game tables with RLS enabled", () => {
   const sql = readRocketMigration();
 
@@ -29,10 +37,12 @@ test("migration enforces player uniqueness, attempt limit, and valid statuses", 
 });
 
 test("cashout rpc locks the attempt row and uses database server time", () => {
-  const sql = readRocketMigration();
+  const sql = readAllMigrations();
 
   assert.match(sql, /create or replace function public\.cash_out_rocket_attempt/);
   assert.match(sql, /for update/);
   assert.match(sql, /clock_timestamp\(\)/);
+  assert.match(sql, /p_cashout_requested_at/);
+  assert.match(sql, /interval '1500 milliseconds'/);
   assert.doesNotMatch(sql, /math\.random/);
 });

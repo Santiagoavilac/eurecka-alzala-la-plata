@@ -18,6 +18,7 @@ import {
 const COOKIE_NAME = "eureka_session";
 const MAX_ATTEMPTS = 3;
 const MAX_PLAYING_MS = 120_000;
+const CASHOUT_BACKDATE_LIMIT_MS = 1500;
 
 type Player = {
   id: string;
@@ -206,6 +207,14 @@ function statePayload(attempt: Attempt) {
   };
 }
 
+function cashoutTimeMs(attempt: Attempt, requestedAt?: string) {
+  const nowMs = Date.now();
+  const requestedMs = requestedAt ? Date.parse(requestedAt) : Number.NaN;
+  if (!Number.isFinite(requestedMs)) return nowMs;
+  const clampedMs = Math.min(nowMs, Math.max(requestedMs, nowMs - CASHOUT_BACKDATE_LIMIT_MS));
+  return Math.max(clampedMs, new Date(attempt.started_at).getTime());
+}
+
 function leaderboard(limit = 10) {
   const bestByPlayer = new Map<string, Attempt>();
   for (const attempt of attempts.values()) {
@@ -381,25 +390,36 @@ export function createDevMemoryApp() {
     try {
       const player = (req as Request & { player: Player }).player;
       const attemptId = String(req.body?.attempt_id ?? "");
+      const requestedAt =
+        typeof req.body?.cashout_requested_at === "string" ? req.body.cashout_requested_at : "";
       const attempt = attempts.get(attemptId);
       if (!attempt || attempt.player_id !== player.id) {
         throw Object.assign(new Error("attempt_not_found"), { status: 404 });
       }
 
-      currentAttemptState(attempt);
-      if (attempt.status === "playing") {
-        const currentMultiplier = calculateMultiplier(
-          Date.now() - new Date(attempt.started_at).getTime(),
-        );
-        if (currentMultiplier >= attempt.crash_point) {
+      if (
+        attempt.status === "playing" ||
+        attempt.status === "crashed" ||
+        attempt.status === "expired"
+      ) {
+        const effectiveMs = cashoutTimeMs(attempt, requestedAt);
+        const elapsedMs = effectiveMs - new Date(attempt.started_at).getTime();
+        const currentMultiplier = calculateMultiplier(elapsedMs);
+        const endedAt = new Date(effectiveMs).toISOString();
+
+        if (elapsedMs > MAX_PLAYING_MS) {
+          attempt.status = "expired";
+          attempt.score = 0;
+          attempt.ended_at = endedAt;
+        } else if (currentMultiplier >= attempt.crash_point) {
           attempt.status = "crashed";
           attempt.score = 0;
-          attempt.ended_at = new Date().toISOString();
+          attempt.ended_at = attempt.ended_at ?? endedAt;
         } else {
           attempt.status = "cashed_out";
           attempt.cashed_out_at = currentMultiplier;
           attempt.score = scoreForMultiplier(currentMultiplier);
-          attempt.ended_at = new Date().toISOString();
+          attempt.ended_at = endedAt;
         }
       }
 
