@@ -138,8 +138,8 @@ function loadConfig(): RuntimeConfig {
   if (!Number.isFinite(port) || port <= 0) throw new Error("PORT must be a positive number");
 
   return {
-    supabaseUrl: requireEnv("SUPABASE_URL"),
-    serviceRoleKey: requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
+    supabaseUrl: requireEnv("SUPABASE_URL").trim(),
+    serviceRoleKey: requireEnv("SUPABASE_SERVICE_ROLE_KEY").trim(),
     frontendOrigins: frontendUrl
       .split(",")
       .map((origin) => origin.trim())

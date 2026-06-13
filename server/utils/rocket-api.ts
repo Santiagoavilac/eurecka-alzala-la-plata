@@ -282,8 +282,8 @@ export function toPublicApiError(error: unknown, fallbackCode = "api_error"): Pu
 export function db() {
   if (supabase) return supabase;
 
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseUrl = process.env.SUPABASE_URL?.trim();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   if (!supabaseUrl || !serviceRoleKey) {
     throw publicApiError("missing_env");
   }
