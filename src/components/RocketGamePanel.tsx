@@ -247,19 +247,44 @@ export function RocketGamePanel({
         <span className="font-mono text-xs text-muted-foreground">EUREKA · ROCKET</span>
       </div>
 
-      <div className="relative z-10 mt-6 flex h-64 items-center justify-center sm:h-80">
+      <div className="relative z-10 mt-6 flex h-64 items-center justify-center overflow-hidden sm:h-80">
         <div
           className={cn(
-            "absolute left-1/2 -translate-x-1/2 text-6xl sm:text-8xl",
-            state === "idle" && "animate-rocket-float",
-            state === "playing" && "animate-rocket-fly",
-            state === "exploded" && "opacity-40",
+            "cash-flight-scene",
+            state === "idle" && "cash-flight-scene--idle",
+            state === "playing" && "cash-flight-scene--playing",
+            state === "exploded" && "cash-flight-scene--exploded",
           )}
         >
-          🚀
-          {state === "playing" && (
-            <div className="absolute left-1/2 top-full h-10 w-3 -translate-x-1/2 animate-thrust rounded-b-full bg-gradient-to-b from-primary to-transparent" />
-          )}
+          <div className="cash-stars" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+          </div>
+          <div className="money-trail" aria-hidden="true">
+            <span>$</span>
+            <span>$</span>
+            <span>$</span>
+            <span>$</span>
+            <span>$</span>
+            <span>$</span>
+            <span>$</span>
+          </div>
+          <img
+            src="/images/cash-rider.png"
+            alt="Personajes Eureka avanzando"
+            className="cash-rider"
+            draggable={false}
+          />
         </div>
       </div>
 

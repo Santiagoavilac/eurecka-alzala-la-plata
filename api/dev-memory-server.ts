@@ -190,6 +190,7 @@ function statePayload(attempt: Attempt) {
       attempt_id: attempt.id,
       status: attempt.status,
       current_multiplier: calculateMultiplier(Date.now() - new Date(attempt.started_at).getTime()),
+      started_at: attempt.started_at,
       server_time: new Date().toISOString(),
     };
   }
@@ -352,17 +353,28 @@ export function createDevMemoryApp() {
     }
   });
 
-  app.get("/api/rocket/state/:attemptId", requirePlayer, (req, res, next) => {
+  function handleRocketState(req: Request, res: Response, next: NextFunction, attemptId: string) {
     const player = (req as Request & { player: Player }).player;
-    const attemptId = Array.isArray(req.params.attemptId)
-      ? req.params.attemptId[0]
-      : req.params.attemptId;
     const attempt = attemptId ? attempts.get(attemptId) : null;
     if (!attempt || attempt.player_id !== player.id) {
       next(Object.assign(new Error("attempt_not_found"), { status: 404 }));
       return;
     }
     res.json(statePayload(currentAttemptState(attempt)));
+  }
+
+  app.get("/api/rocket/state", requirePlayer, (req, res, next) => {
+    const attemptId = Array.isArray(req.query.attempt_id)
+      ? req.query.attempt_id[0]
+      : req.query.attempt_id;
+    handleRocketState(req, res, next, String(attemptId ?? ""));
+  });
+
+  app.get("/api/rocket/state/:attemptId", requirePlayer, (req, res, next) => {
+    const attemptId = Array.isArray(req.params.attemptId)
+      ? req.params.attemptId[0]
+      : req.params.attemptId;
+    handleRocketState(req, res, next, attemptId ?? "");
   });
 
   app.post("/api/rocket/cashout", requirePlayer, (req, res, next) => {
