@@ -603,6 +603,7 @@ export function attemptStatePayload(attempt: RocketAttempt) {
       attempt_id: attempt.id,
       status: "playing",
       current_multiplier: calculateMultiplier(Date.now() - new Date(attempt.started_at).getTime()),
+      started_at: attempt.started_at,
       server_time: new Date().toISOString(),
     };
   }

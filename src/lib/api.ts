@@ -36,6 +36,7 @@ export interface StartRocketResponse {
   attemptId: string;
   attemptNumber: number;
   startedAt: string;
+  serverTime: string;
   serverSeedHash: string;
   attemptsRemaining: number;
 }
@@ -44,6 +45,8 @@ export interface RocketState {
   attemptId: string;
   status: AttemptStatus;
   currentMultiplier?: number;
+  startedAt?: string;
+  serverTime?: string;
   cashedOutAt?: number | null;
   score?: number;
   crashPoint?: number;
@@ -112,6 +115,7 @@ interface PlayerApiPayload {
 interface StartRocketApiPayload {
   attempt_id: string;
   attempt_number: number;
+  server_time: string;
   started_at: string;
   server_seed_hash: string;
   attempts_left_after_start: number;
@@ -121,6 +125,8 @@ interface RocketStateApiPayload {
   attempt_id: string;
   status: AttemptStatus;
   current_multiplier?: number;
+  started_at?: string;
+  server_time?: string;
   cashed_out_at?: number | null;
   score?: number;
   crash_point?: number;
@@ -314,6 +320,7 @@ export async function startRocketAttempt(): Promise<StartRocketResponse> {
     attemptId: payload.attempt_id,
     attemptNumber: payload.attempt_number,
     startedAt: payload.started_at,
+    serverTime: payload.server_time,
     serverSeedHash: payload.server_seed_hash,
     attemptsRemaining: payload.attempts_left_after_start,
   };
@@ -329,6 +336,8 @@ export async function getRocketState(attemptId: string): Promise<RocketState> {
     attemptId: payload.attempt_id,
     status: payload.status,
     currentMultiplier: payload.current_multiplier,
+    startedAt: payload.started_at,
+    serverTime: payload.server_time,
     cashedOutAt: payload.cashed_out_at,
     score: payload.score,
     crashPoint: payload.crash_point,

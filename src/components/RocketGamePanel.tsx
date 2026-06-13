@@ -19,6 +19,11 @@ interface Result {
   attemptsRemaining: number;
 }
 
+function calculateDisplayMultiplier(elapsedMs: number): number {
+  const seconds = Math.max(0, elapsedMs) / 1000;
+  return Math.max(1, Math.pow(1.06, seconds * 10));
+}
+
 export function RocketGamePanel({
   player,
   onPlayerUpdate,
@@ -32,10 +37,14 @@ export function RocketGamePanel({
   const [error, setError] = useState<string | null>(null);
   const attemptIdRef = useRef<string | null>(null);
   const pollRef = useRef<number | null>(null);
+  const animationRef = useRef<number | null>(null);
+  const startedAtMsRef = useRef<number | null>(null);
+  const serverClockOffsetMsRef = useRef(0);
 
   useEffect(
     () => () => {
       stopPolling();
+      stopAnimation();
     },
     [],
   );
@@ -49,8 +58,45 @@ export function RocketGamePanel({
     }
   }
 
+  function stopAnimation() {
+    if (animationRef.current) {
+      window.cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
+  }
+
+  function syncAttemptClock(startedAt: string, serverTime?: string) {
+    const startedAtMs = Date.parse(startedAt);
+    if (Number.isFinite(startedAtMs)) {
+      startedAtMsRef.current = startedAtMs;
+    }
+
+    if (serverTime) {
+      const serverNowMs = Date.parse(serverTime);
+      if (Number.isFinite(serverNowMs)) {
+        serverClockOffsetMsRef.current = serverNowMs - Date.now();
+      }
+    }
+  }
+
+  function startMultiplierAnimation() {
+    stopAnimation();
+
+    const tick = () => {
+      const startedAtMs = startedAtMsRef.current;
+      if (startedAtMs != null) {
+        const serverNowMs = Date.now() + serverClockOffsetMsRef.current;
+        setMultiplier(calculateDisplayMultiplier(serverNowMs - startedAtMs));
+      }
+      animationRef.current = window.requestAnimationFrame(tick);
+    };
+
+    animationRef.current = window.requestAnimationFrame(tick);
+  }
+
   function applyTerminalState(next: RocketState) {
     stopPolling();
+    stopAnimation();
     const terminalMultiplier = next.cashedOutAt ?? next.currentMultiplier ?? multiplier;
     setState(next.status === "crashed" ? "exploded" : "cashed_out");
     setMultiplier(terminalMultiplier || 1);
@@ -73,7 +119,16 @@ export function RocketGamePanel({
       try {
         const next = await getRocketState(attemptId);
         if (next.status === "playing") {
-          setMultiplier(next.currentMultiplier ?? 1);
+          if (next.startedAt) {
+            syncAttemptClock(next.startedAt, next.serverTime);
+          } else if (next.serverTime && next.currentMultiplier) {
+            const serverNowMs = Date.parse(next.serverTime);
+            if (Number.isFinite(serverNowMs)) {
+              const elapsedMs = (Math.log(next.currentMultiplier) / (10 * Math.log(1.06))) * 1000;
+              startedAtMsRef.current = serverNowMs - elapsedMs;
+              serverClockOffsetMsRef.current = serverNowMs - Date.now();
+            }
+          }
           return;
         }
 
@@ -100,7 +155,9 @@ export function RocketGamePanel({
       setMultiplier(1.0);
       const attempt = await startRocketAttempt();
       attemptIdRef.current = attempt.attemptId;
+      syncAttemptClock(attempt.startedAt, attempt.serverTime);
       setState("playing");
+      startMultiplierAnimation();
       startServerPolling(attempt.attemptId);
       const fresh = await refreshPlayer();
       if (fresh) {
@@ -120,6 +177,7 @@ export function RocketGamePanel({
     try {
       setError(null);
       stopPolling();
+      stopAnimation();
       const res = await cashOutRocketAttempt(attemptIdRef.current);
       const cashedMultiplier = res.cashedOutAt ?? res.currentMultiplier ?? multiplier;
       setState(res.status === "crashed" ? "exploded" : "cashed_out");
@@ -137,12 +195,14 @@ export function RocketGamePanel({
       });
     } catch {
       setError("No pudimos registrar el retiro.");
+      startMultiplierAnimation();
       startServerPolling(attemptIdRef.current);
     }
   }
 
   function handleReset() {
     stopPolling();
+    stopAnimation();
     setState("idle");
     setMultiplier(1.0);
     setResult(null);
