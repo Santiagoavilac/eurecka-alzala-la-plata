@@ -184,6 +184,11 @@ class ApiClientError extends Error {
   }
 }
 
+export function apiErrorMessage(error: unknown, fallback = "api_error") {
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
+
 function apiUrl(path: string) {
   return `${API_BASE_URL}/${path.replace(/^\/+/, "")}`;
 }

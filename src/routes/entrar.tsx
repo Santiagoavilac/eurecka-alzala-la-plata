@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EurekaLogo } from "@/components/EurekaLogo";
-import { loginPlayer } from "@/lib/api";
+import { apiErrorMessage, loginPlayer } from "@/lib/api";
 
 export const Route = createFileRoute("/entrar")({
   head: () => ({ meta: [{ title: "Crear mi pase — Eureka Rocket" }] }),
@@ -27,8 +27,8 @@ function EntrarPage() {
         phone: form.phone,
       });
       navigate({ to: "/rocket" });
-    } catch {
-      setError("No pudimos crear tu pase. Revisá los datos e intentá otra vez.");
+    } catch (error) {
+      setError(`Error exacto: ${apiErrorMessage(error, "login_failed")}`);
     } finally {
       setLoading(false);
     }
