@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Brain, ChevronRight, Clock, ShieldCheck, Trophy, UserPlus } from "lucide-react";
+import { Brain, ChevronRight, Clock, Rocket, ShieldCheck, Trophy, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EurekaLogo } from "@/components/EurekaLogo";
 
@@ -34,56 +34,106 @@ export function GamesHub() {
           </div>
         </section>
 
-        <section className="mt-12 grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
-          <article className="neon-border rounded-2xl bg-surface p-6 sm:p-8">
-            <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <div className="flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-                  <Brain className="size-7" />
+        <section className="mt-12 grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
+          <div className="space-y-6">
+            <article className="neon-border rounded-2xl bg-surface p-6 sm:p-8">
+              <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+                    <Brain className="size-7" />
+                  </div>
+                  <h2 className="mt-6 text-3xl font-black uppercase tracking-tighter sm:text-4xl">
+                    Adivina el jugador
+                  </h2>
+                  <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
+                    Tenés 5 preguntas. En cada una vas a ver club, país y posición. Escribí el
+                    nombre correcto antes de que termine el tiempo.
+                  </p>
                 </div>
-                <h2 className="mt-6 text-3xl font-black uppercase tracking-tighter sm:text-4xl">
-                  Adivina el jugador
-                </h2>
-                <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
-                  Tenés 5 preguntas. En cada una vas a ver club, país y posición. Escribí el nombre
-                  correcto antes de que termine el tiempo.
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-center sm:w-44">
-                <Stat label="Preguntas" value="5" />
-                <Stat label="Tiempo" value="7s" />
-              </div>
-            </div>
-
-            <div className="mt-8 grid gap-3 sm:grid-cols-3">
-              {[
-                { icon: Clock, title: "Rápido", text: "7 segundos por pista." },
-                { icon: ShieldCheck, title: "Seguro", text: "Validación en backend." },
-                { icon: Trophy, title: "Resultado", text: "Score final sobre 5." },
-              ].map(({ icon: Icon, title, text }) => (
-                <div
-                  key={title}
-                  className="rounded-xl border border-border/70 bg-background/45 p-4"
-                >
-                  <Icon className="size-5 text-primary" />
-                  <div className="mt-3 text-xs font-black uppercase tracking-widest">{title}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">{text}</div>
+                <div className="grid grid-cols-2 gap-2 text-center sm:w-44">
+                  <Stat label="Preguntas" value="5" />
+                  <Stat label="Tiempo" value="11s" />
                 </div>
-              ))}
-            </div>
+              </div>
 
-            <Button
-              asChild
-              size="lg"
-              className="mt-8 h-14 w-full text-base font-black uppercase tracking-widest sm:w-auto"
-            >
-              <Link to="/games/adivina-el-jugador">
-                Jugar <ChevronRight className="ml-1 size-5" />
-              </Link>
-            </Button>
-          </article>
+              <div className="mt-8 grid gap-3 sm:grid-cols-3">
+                {[
+                  { icon: Clock, title: "Rápido", text: "11 segundos por pista." },
+                  { icon: ShieldCheck, title: "Seguro", text: "Validación en backend." },
+                  { icon: Trophy, title: "Resultado", text: "Score final sobre 5." },
+                ].map(({ icon: Icon, title, text }) => (
+                  <div
+                    key={title}
+                    className="rounded-xl border border-border/70 bg-background/45 p-4"
+                  >
+                    <Icon className="size-5 text-primary" />
+                    <div className="mt-3 text-xs font-black uppercase tracking-widest">{title}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">{text}</div>
+                  </div>
+                ))}
+              </div>
 
-          <aside className="rounded-2xl border border-border/70 bg-surface/70 p-6">
+              <Button
+                asChild
+                size="lg"
+                className="mt-8 h-14 w-full text-base font-black uppercase tracking-widest sm:w-auto"
+              >
+                <Link to="/games/adivina-el-jugador">
+                  Jugar <ChevronRight className="ml-1 size-5" />
+                </Link>
+              </Button>
+            </article>
+
+            <article className="neon-border rounded-2xl bg-surface p-6 sm:p-8">
+              <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+                    <Rocket className="size-7" />
+                  </div>
+                  <h2 className="mt-6 text-3xl font-black uppercase tracking-tighter sm:text-4xl">
+                    Cohete EUREKA
+                  </h2>
+                  <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
+                    ¡El cohete despega y el multiplicador sube! Retirate a tiempo con tu puntaje
+                    antes de que explote.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-center sm:w-44">
+                  <Stat label="Intentos" value="5" />
+                  <Stat label="Multiplicador" value="100x+" />
+                </div>
+              </div>
+
+              <div className="mt-8 grid gap-3 sm:grid-cols-3">
+                {[
+                  { icon: Clock, title: "Dinámico", text: "Velocidad progresiva." },
+                  { icon: ShieldCheck, title: "Seguro", text: "Retiros validados en server." },
+                  { icon: Trophy, title: "Competencia", text: "Multiplicadores récord." },
+                ].map(({ icon: Icon, title, text }) => (
+                  <div
+                    key={title}
+                    className="rounded-xl border border-border/70 bg-background/45 p-4"
+                  >
+                    <Icon className="size-5 text-primary" />
+                    <div className="mt-3 text-xs font-black uppercase tracking-widest">{title}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">{text}</div>
+                  </div>
+                ))}
+              </div>
+
+              <Button
+                asChild
+                size="lg"
+                className="mt-8 h-14 w-full text-base font-black uppercase tracking-widest sm:w-auto"
+              >
+                <Link to="/rocket">
+                  Jugar <ChevronRight className="ml-1 size-5" />
+                </Link>
+              </Button>
+            </article>
+          </div>
+
+          <aside className="rounded-2xl border border-border/70 bg-surface/70 p-6 h-fit">
             <UserPlus className="size-7 text-primary" />
             <h2 className="mt-5 text-xl font-black uppercase tracking-tighter">Tu pase</h2>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
