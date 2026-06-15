@@ -32,3 +32,9 @@ supabase/.temp/
 *.njsproj
 *.sln
 *.sw?
+
+# Environment variables
+.env
+.env.development
+.env.*
+
