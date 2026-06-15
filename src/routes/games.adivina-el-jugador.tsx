@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { EurekaLogo } from "@/components/EurekaLogo";
-import { playGameMusic, playRequestedGameMusic } from "@/lib/game-audio";
+import { playGameMusic, stopGameMusic } from "@/lib/game-audio";
 import {
   apiErrorMessage,
   getGuessPlayerCurrentQuestion,
@@ -62,15 +62,33 @@ function GuessPlayerPage() {
         const started = await startGuessPlayerSession();
         if (!mounted) return;
         setSession(started);
-        const musicStatus = await playRequestedGameMusic();
-        if (mounted && musicStatus === "blocked") {
+
+        // Attempt playing music directly
+        const played = await playGameMusic();
+        if (mounted && !played) {
           setAudioBlocked(true);
         }
+
         if (started.status !== "active" || !started.currentQuestion) {
           setResult(await getGuessPlayerResult(started.sessionId));
         }
       } catch (error) {
-        if (mounted) setError(apiErrorMessage(error, "guess_player_start_failed"));
+        if (!mounted) return;
+        const err = error as { status?: number; message?: string };
+        const isAuthError =
+          err &&
+          (err.status === 401 ||
+            err.status === 404 ||
+            err.message === "player_id_missing" ||
+            err.message === "player_not_found");
+        if (isAuthError) {
+          navigate({
+            to: "/entrar",
+            search: { next: "/games/adivina-el-jugador" },
+          });
+        } else {
+          setError(apiErrorMessage(error, "guess_player_start_failed"));
+        }
       } finally {
         if (mounted) setLoading(false);
       }
@@ -78,15 +96,16 @@ function GuessPlayerPage() {
     void boot();
     return () => {
       mounted = false;
+      stopGameMusic(); // Stop music when leaving the page
     };
   }, [navigate]);
 
   const currentQuestion = session?.currentQuestion ?? null;
   const remainingMs = useMemo(() => {
-    if (!currentQuestion) return 0;
+    if (!currentQuestion || feedback) return 0;
     const startedAt = new Date(currentQuestion.startedAt).getTime();
     return Math.max(0, startedAt + currentQuestion.timeLimitSeconds * 1000 - now);
-  }, [currentQuestion, now]);
+  }, [currentQuestion, now, feedback]);
   const remainingSeconds = Math.ceil(remainingMs / 1000);
   const progress = currentQuestion
     ? (remainingMs / (currentQuestion.timeLimitSeconds * 1000)) * 100
@@ -127,14 +146,27 @@ function GuessPlayerPage() {
           questionId: session.currentQuestion.questionId,
           answer: trimmed,
         });
-        setFeedback(response.currentQuestion ? null : response);
-        setSession(response);
+
+        // Set feedback immediately to show user correct/incorrect state
+        setFeedback(response);
         setAnswer("");
-        setNow(Date.now());
-        autoSubmittedRef.current = null;
-        if (response.status !== "active" || !response.currentQuestion) {
-          setResult(await getGuessPlayerResult(response.sessionId));
-        }
+
+        // Wait for 2 seconds before proceeding to next question or results
+        setTimeout(async () => {
+          if (response.status !== "active" || !response.currentQuestion) {
+            try {
+              const res = await getGuessPlayerResult(response.sessionId);
+              setResult(res);
+            } catch (error) {
+              setError(apiErrorMessage(error, "guess_player_refresh_failed"));
+            }
+          }
+          setSession(response);
+          setFeedback(null);
+          setNow(Date.now());
+          autoSubmittedRef.current = null;
+          setSubmitting(false); // Enable submitting after the 2-second timeout
+        }, 2000);
       } catch (error) {
         setError(apiErrorMessage(error, "guess_player_answer_failed"));
         try {
@@ -142,8 +174,7 @@ function GuessPlayerPage() {
         } catch {
           // Ignore secondary refresh errors so the primary answer error is displayed
         }
-      } finally {
-        setSubmitting(false);
+        setSubmitting(false); // Enable submitting immediately on error
       }
     },
     [answer, refreshCurrent, session, submitting],
@@ -199,8 +230,25 @@ function GuessPlayerPage() {
       if (started.status !== "active" || !started.currentQuestion) {
         setResult(await getGuessPlayerResult(started.sessionId));
       }
+      // Attempt playing music on restart
+      const played = await playGameMusic();
+      setAudioBlocked(!played);
     } catch (error) {
-      setError(apiErrorMessage(error, "guess_player_refresh_failed"));
+      const err = error as { status?: number; message?: string };
+      const isAuthError =
+        err &&
+        (err.status === 401 ||
+          err.status === 404 ||
+          err.message === "player_id_missing" ||
+          err.message === "player_not_found");
+      if (isAuthError) {
+        navigate({
+          to: "/entrar",
+          search: { next: "/games/adivina-el-jugador" },
+        });
+      } else {
+        setError(apiErrorMessage(error, "guess_player_refresh_failed"));
+      }
     } finally {
       setLoading(false);
     }
@@ -242,10 +290,12 @@ function GuessPlayerPage() {
               <Badge variant="outline" className="neon-border uppercase tracking-widest">
                 Pregunta {currentQuestion.questionOrder}/{currentQuestion.totalQuestions}
               </Badge>
-              <div className="inline-flex items-center gap-2 font-mono text-lg font-black neon-text">
-                <Clock className="size-5" />
-                {remainingSeconds}s
-              </div>
+              {!feedback && (
+                <div className="inline-flex items-center gap-2 font-mono text-lg font-black neon-text">
+                  <Clock className="size-5" />
+                  {remainingSeconds}s
+                </div>
+              )}
             </div>
 
             <Progress value={progress} className="mt-5 h-2" />
@@ -266,16 +316,16 @@ function GuessPlayerPage() {
               <Input
                 value={answer}
                 onChange={(event) => setAnswer(event.target.value)}
-                disabled={submitting}
+                disabled={submitting || !!feedback}
                 placeholder="Escribí el nombre del jugador"
                 className="h-14 border-border bg-background text-base"
               />
               <Button
                 type="submit"
-                disabled={!answer.trim() || submitting}
+                disabled={!answer.trim() || submitting || !!feedback}
                 className="h-13 w-full font-black uppercase tracking-widest"
               >
-                {submitting ? "Enviando..." : "Responder"}
+                {submitting && !feedback ? "Enviando..." : "Responder"}
               </Button>
             </form>
 
