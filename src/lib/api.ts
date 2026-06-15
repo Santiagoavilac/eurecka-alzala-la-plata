@@ -33,6 +33,53 @@ export interface LeaderboardEntry {
   date: string;
 }
 
+export interface GuessPlayerQuestion {
+  questionId: string;
+  questionOrder: number;
+  totalQuestions: number;
+  club: string;
+  country: string;
+  position: string;
+  startedAt: string;
+  serverTime: string;
+  timeLimitSeconds: number;
+  timeRemainingSeconds: number;
+}
+
+export interface GuessPlayerSessionState {
+  sessionId: string;
+  status: "active" | "completed" | "expired";
+  score: number;
+  totalQuestions: number;
+  currentQuestion: GuessPlayerQuestion | null;
+}
+
+export interface GuessPlayerAnswerResult extends GuessPlayerSessionState {
+  isCorrect: boolean;
+  expired: boolean;
+  correctAnswer: string;
+}
+
+export interface GuessPlayerResult {
+  sessionId: string;
+  status: "active" | "completed" | "expired";
+  score: number;
+  correctAnswers: number;
+  totalQuestions: number;
+  startedAt: string;
+  completedAt: string | null;
+  questions: {
+    questionId: string;
+    questionOrder: number;
+    club: string;
+    country: string;
+    position: string;
+    userAnswer: string | null;
+    isCorrect: boolean | null;
+    correctAnswer: string;
+  }[];
+}
+
 export interface StartRocketResponse {
   attemptId: string;
   attemptNumber: number;
@@ -151,6 +198,53 @@ interface LeaderboardApiRow {
   created_at: string;
 }
 
+interface GuessPlayerQuestionApiPayload {
+  question_id: string;
+  question_order: number;
+  total_questions: number;
+  club: string;
+  country: string;
+  position: string;
+  started_at: string;
+  server_time: string;
+  time_limit_seconds: number;
+  time_remaining_seconds: number;
+}
+
+interface GuessPlayerSessionApiPayload {
+  session_id: string;
+  status: "active" | "completed" | "expired";
+  score: number;
+  total_questions: number;
+  current_question: GuessPlayerQuestionApiPayload | null;
+}
+
+interface GuessPlayerAnswerApiPayload extends GuessPlayerSessionApiPayload {
+  is_correct: boolean;
+  expired: boolean;
+  correct_answer: string;
+}
+
+interface GuessPlayerResultApiPayload {
+  session_id: string;
+  status: "active" | "completed" | "expired";
+  score: number;
+  correct_answers: number;
+  total_questions: number;
+  started_at: string;
+  completed_at: string | null;
+  questions: {
+    question_id: string;
+    question_order: number;
+    club: string;
+    country: string;
+    position: string;
+    user_answer: string | null;
+    is_correct: boolean | null;
+    correct_answer: string;
+  }[];
+}
+
 interface AdminPlayerApiRow {
   id: string;
   full_name: string;
@@ -267,6 +361,34 @@ function mapPlayerPayload(payload: PlayerApiPayload): PlayerStatus {
   };
 }
 
+function mapGuessPlayerQuestion(
+  question: GuessPlayerQuestionApiPayload | null,
+): GuessPlayerQuestion | null {
+  if (!question) return null;
+  return {
+    questionId: question.question_id,
+    questionOrder: question.question_order,
+    totalQuestions: question.total_questions,
+    club: question.club,
+    country: question.country,
+    position: question.position,
+    startedAt: question.started_at,
+    serverTime: question.server_time,
+    timeLimitSeconds: question.time_limit_seconds,
+    timeRemainingSeconds: question.time_remaining_seconds,
+  };
+}
+
+function mapGuessPlayerSession(payload: GuessPlayerSessionApiPayload): GuessPlayerSessionState {
+  return {
+    sessionId: payload.session_id,
+    status: payload.status,
+    score: payload.score,
+    totalQuestions: payload.total_questions,
+    currentQuestion: mapGuessPlayerQuestion(payload.current_question),
+  };
+}
+
 function getStoredPlayerId() {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem(PLAYER_ID_STORAGE_KEY);
@@ -372,6 +494,78 @@ export async function cashOutRocketAttempt(
     attemptsLeft: payload.attempts_left,
     bestScore: payload.best_score,
     bestMultiplier: payload.best_multiplier,
+  };
+}
+
+export async function startGuessPlayerSession(): Promise<GuessPlayerSessionState> {
+  const payload = await request<GuessPlayerSessionApiPayload>("guess-player/start", {
+    method: "POST",
+    body: JSON.stringify({ player_id: requireStoredPlayerId() }),
+  });
+  return mapGuessPlayerSession(payload);
+}
+
+export async function getGuessPlayerCurrentQuestion(
+  sessionId: string,
+): Promise<GuessPlayerSessionState> {
+  const payload = await request<GuessPlayerSessionApiPayload>(
+    `guess-player/session/${encodeURIComponent(sessionId)}/current?player_id=${encodeURIComponent(
+      requireStoredPlayerId(),
+    )}`,
+  );
+  return mapGuessPlayerSession(payload);
+}
+
+export async function submitGuessPlayerAnswer({
+  sessionId,
+  questionId,
+  answer,
+}: {
+  sessionId: string;
+  questionId: string;
+  answer: string;
+}): Promise<GuessPlayerAnswerResult> {
+  const payload = await request<GuessPlayerAnswerApiPayload>("guess-player/answer", {
+    method: "POST",
+    body: JSON.stringify({
+      player_id: requireStoredPlayerId(),
+      session_id: sessionId,
+      question_id: questionId,
+      answer,
+    }),
+  });
+  return {
+    ...mapGuessPlayerSession(payload),
+    isCorrect: payload.is_correct,
+    expired: payload.expired,
+    correctAnswer: payload.correct_answer,
+  };
+}
+
+export async function getGuessPlayerResult(sessionId: string): Promise<GuessPlayerResult> {
+  const payload = await request<GuessPlayerResultApiPayload>(
+    `guess-player/session/${encodeURIComponent(sessionId)}/result?player_id=${encodeURIComponent(
+      requireStoredPlayerId(),
+    )}`,
+  );
+  return {
+    sessionId: payload.session_id,
+    status: payload.status,
+    score: payload.score,
+    correctAnswers: payload.correct_answers,
+    totalQuestions: payload.total_questions,
+    startedAt: payload.started_at,
+    completedAt: payload.completed_at,
+    questions: payload.questions.map((question) => ({
+      questionId: question.question_id,
+      questionOrder: question.question_order,
+      club: question.club,
+      country: question.country,
+      position: question.position,
+      userAnswer: question.user_answer,
+      isCorrect: question.is_correct,
+      correctAnswer: question.correct_answer,
+    })),
   };
 }
 

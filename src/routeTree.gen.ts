@@ -11,10 +11,13 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as RocketRouteImport } from './routes/rocket'
 import { Route as RankingRouteImport } from './routes/ranking'
+import { Route as GamesRouteImport } from './routes/games'
 import { Route as EntrarRouteImport } from './routes/entrar'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as GamesIndexRouteImport } from './routes/games.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
+import { Route as GamesAdivinaElJugadorRouteImport } from './routes/games.adivina-el-jugador'
 import { Route as AdminSospechosaRouteImport } from './routes/admin.sospechosa'
 import { Route as AdminRankingRouteImport } from './routes/admin.ranking'
 import { Route as AdminParticipantesRouteImport } from './routes/admin.participantes'
@@ -28,6 +31,11 @@ const RocketRoute = RocketRouteImport.update({
 const RankingRoute = RankingRouteImport.update({
   id: '/ranking',
   path: '/ranking',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GamesRoute = GamesRouteImport.update({
+  id: '/games',
+  path: '/games',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EntrarRoute = EntrarRouteImport.update({
@@ -45,10 +53,20 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GamesIndexRoute = GamesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => GamesRoute,
+} as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AdminRoute,
+} as any)
+const GamesAdivinaElJugadorRoute = GamesAdivinaElJugadorRouteImport.update({
+  id: '/adivina-el-jugador',
+  path: '/adivina-el-jugador',
+  getParentRoute: () => GamesRoute,
 } as any)
 const AdminSospechosaRoute = AdminSospechosaRouteImport.update({
   id: '/sospechosa',
@@ -75,13 +93,16 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
   '/entrar': typeof EntrarRoute
+  '/games': typeof GamesRouteWithChildren
   '/ranking': typeof RankingRoute
   '/rocket': typeof RocketRoute
   '/admin/intentos': typeof AdminIntentosRoute
   '/admin/participantes': typeof AdminParticipantesRoute
   '/admin/ranking': typeof AdminRankingRoute
   '/admin/sospechosa': typeof AdminSospechosaRoute
+  '/games/adivina-el-jugador': typeof GamesAdivinaElJugadorRoute
   '/admin/': typeof AdminIndexRoute
+  '/games/': typeof GamesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -92,20 +113,25 @@ export interface FileRoutesByTo {
   '/admin/participantes': typeof AdminParticipantesRoute
   '/admin/ranking': typeof AdminRankingRoute
   '/admin/sospechosa': typeof AdminSospechosaRoute
+  '/games/adivina-el-jugador': typeof GamesAdivinaElJugadorRoute
   '/admin': typeof AdminIndexRoute
+  '/games': typeof GamesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
   '/entrar': typeof EntrarRoute
+  '/games': typeof GamesRouteWithChildren
   '/ranking': typeof RankingRoute
   '/rocket': typeof RocketRoute
   '/admin/intentos': typeof AdminIntentosRoute
   '/admin/participantes': typeof AdminParticipantesRoute
   '/admin/ranking': typeof AdminRankingRoute
   '/admin/sospechosa': typeof AdminSospechosaRoute
+  '/games/adivina-el-jugador': typeof GamesAdivinaElJugadorRoute
   '/admin/': typeof AdminIndexRoute
+  '/games/': typeof GamesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -113,13 +139,16 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/entrar'
+    | '/games'
     | '/ranking'
     | '/rocket'
     | '/admin/intentos'
     | '/admin/participantes'
     | '/admin/ranking'
     | '/admin/sospechosa'
+    | '/games/adivina-el-jugador'
     | '/admin/'
+    | '/games/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -130,25 +159,31 @@ export interface FileRouteTypes {
     | '/admin/participantes'
     | '/admin/ranking'
     | '/admin/sospechosa'
+    | '/games/adivina-el-jugador'
     | '/admin'
+    | '/games'
   id:
     | '__root__'
     | '/'
     | '/admin'
     | '/entrar'
+    | '/games'
     | '/ranking'
     | '/rocket'
     | '/admin/intentos'
     | '/admin/participantes'
     | '/admin/ranking'
     | '/admin/sospechosa'
+    | '/games/adivina-el-jugador'
     | '/admin/'
+    | '/games/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRouteWithChildren
   EntrarRoute: typeof EntrarRoute
+  GamesRoute: typeof GamesRouteWithChildren
   RankingRoute: typeof RankingRoute
   RocketRoute: typeof RocketRoute
 }
@@ -167,6 +202,13 @@ declare module '@tanstack/react-router' {
       path: '/ranking'
       fullPath: '/ranking'
       preLoaderRoute: typeof RankingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/games': {
+      id: '/games'
+      path: '/games'
+      fullPath: '/games'
+      preLoaderRoute: typeof GamesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/entrar': {
@@ -190,12 +232,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/games/': {
+      id: '/games/'
+      path: '/'
+      fullPath: '/games/'
+      preLoaderRoute: typeof GamesIndexRouteImport
+      parentRoute: typeof GamesRoute
+    }
     '/admin/': {
       id: '/admin/'
       path: '/'
       fullPath: '/admin/'
       preLoaderRoute: typeof AdminIndexRouteImport
       parentRoute: typeof AdminRoute
+    }
+    '/games/adivina-el-jugador': {
+      id: '/games/adivina-el-jugador'
+      path: '/adivina-el-jugador'
+      fullPath: '/games/adivina-el-jugador'
+      preLoaderRoute: typeof GamesAdivinaElJugadorRouteImport
+      parentRoute: typeof GamesRoute
     }
     '/admin/sospechosa': {
       id: '/admin/sospechosa'
@@ -246,10 +302,23 @@ const AdminRouteChildren: AdminRouteChildren = {
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
+interface GamesRouteChildren {
+  GamesAdivinaElJugadorRoute: typeof GamesAdivinaElJugadorRoute
+  GamesIndexRoute: typeof GamesIndexRoute
+}
+
+const GamesRouteChildren: GamesRouteChildren = {
+  GamesAdivinaElJugadorRoute: GamesAdivinaElJugadorRoute,
+  GamesIndexRoute: GamesIndexRoute,
+}
+
+const GamesRouteWithChildren = GamesRoute._addFileChildren(GamesRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRouteWithChildren,
   EntrarRoute: EntrarRoute,
+  GamesRoute: GamesRouteWithChildren,
   RankingRoute: RankingRoute,
   RocketRoute: RocketRoute,
 }

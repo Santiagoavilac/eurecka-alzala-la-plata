@@ -20,12 +20,20 @@ import {
   normalizePhone,
   resolvePlayerIdentity,
 } from "./game/game";
+import {
+  GUESS_PLAYER_QUESTION_COUNT,
+  GUESS_PLAYER_TIME_LIMIT_SECONDS,
+  getFootballerById,
+  isCorrectFootballerAnswer,
+  selectGuessPlayerQuestions,
+} from "./game/guess-player";
 
 const PLAYER_COOKIE = "eureka_session";
 const ADMIN_COOKIE = "eureka_admin";
 const SESSION_DAYS = 7;
 const MAX_ATTEMPTS = 5;
 const MAX_PLAYING_MS = 120_000;
+const GUESS_PLAYER_TIME_LIMIT_MS = GUESS_PLAYER_TIME_LIMIT_SECONDS * 1000;
 
 type Db = SupabaseClient;
 
@@ -106,6 +114,36 @@ type PlayerSession = {
   session_token_hash: string;
   expires_at: string;
   revoked_at: string | null;
+};
+
+type GuessPlayerSession = {
+  id: string;
+  player_id: string;
+  game_type: "guess_player";
+  status: "active" | "completed" | "expired";
+  score: number;
+  total_questions: number;
+  started_at: string;
+  completed_at: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  created_at: string;
+};
+
+type GuessPlayerQuestion = {
+  id: string;
+  session_id: string;
+  footballer_id: string;
+  question_order: number;
+  club_hint: string;
+  country_hint: string;
+  position_hint: string;
+  started_at: string | null;
+  answered_at: string | null;
+  user_answer: string | null;
+  is_correct: boolean | null;
+  is_locked: boolean;
+  created_at: string;
 };
 
 type AuthContext = {
@@ -523,6 +561,137 @@ function datatablePayload<T>({
   return { rows, total, page, pageSize, filters, sort };
 }
 
+function guessQuestionPayload(question: GuessPlayerQuestion) {
+  const startedAt = question.started_at ?? new Date().toISOString();
+  const elapsedMs = Date.now() - new Date(startedAt).getTime();
+  return {
+    question_id: question.id,
+    question_order: question.question_order,
+    total_questions: GUESS_PLAYER_QUESTION_COUNT,
+    club: question.club_hint,
+    country: question.country_hint,
+    position: question.position_hint,
+    started_at: startedAt,
+    server_time: new Date().toISOString(),
+    time_limit_seconds: GUESS_PLAYER_TIME_LIMIT_SECONDS,
+    time_remaining_seconds: Math.max(0, Math.ceil((GUESS_PLAYER_TIME_LIMIT_MS - elapsedMs) / 1000)),
+  };
+}
+
+async function getGuessPlayerSessionForPlayer(
+  db: Db,
+  sessionId: string,
+  playerId: string,
+): Promise<GuessPlayerSession | null> {
+  const result = await db
+    .from("guess_player_sessions")
+    .select("*")
+    .eq("id", sessionId)
+    .eq("player_id", playerId)
+    .maybeSingle();
+  if (result.error) throw result.error;
+  return result.data as GuessPlayerSession | null;
+}
+
+async function getGuessPlayerQuestions(db: Db, sessionId: string): Promise<GuessPlayerQuestion[]> {
+  const result = await db
+    .from("guess_player_session_questions")
+    .select("*")
+    .eq("session_id", sessionId)
+    .order("question_order", { ascending: true });
+  if (result.error) throw result.error;
+  return (result.data ?? []) as GuessPlayerQuestion[];
+}
+
+async function completeGuessPlayerSession(db: Db, sessionId: string) {
+  const questions = await getGuessPlayerQuestions(db, sessionId);
+  const score = questions.filter((question) => question.is_correct).length;
+  const result = await db
+    .from("guess_player_sessions")
+    .update({
+      status: "completed",
+      score,
+      completed_at: new Date().toISOString(),
+    })
+    .eq("id", sessionId)
+    .select("*")
+    .single();
+  if (result.error) throw result.error;
+  return result.data as GuessPlayerSession;
+}
+
+async function lockExpiredGuessPlayerQuestion(db: Db, question: GuessPlayerQuestion) {
+  const result = await db
+    .from("guess_player_session_questions")
+    .update({
+      answered_at: new Date().toISOString(),
+      user_answer: null,
+      is_correct: false,
+      is_locked: true,
+    })
+    .eq("id", question.id)
+    .eq("is_locked", false)
+    .select("*")
+    .maybeSingle();
+  if (result.error) throw result.error;
+  return (result.data as GuessPlayerQuestion | null) ?? question;
+}
+
+async function currentGuessPlayerQuestion(db: Db, session: GuessPlayerSession) {
+  let questions = await getGuessPlayerQuestions(db, session.id);
+
+  while (true) {
+    const current = questions.find((question) => !question.is_locked);
+    if (!current) {
+      const completed = await completeGuessPlayerSession(db, session.id);
+      return { session: completed, question: null };
+    }
+
+    if (!current.started_at) {
+      const result = await db
+        .from("guess_player_session_questions")
+        .update({ started_at: new Date().toISOString() })
+        .eq("id", current.id)
+        .select("*")
+        .single();
+      if (result.error) throw result.error;
+      return { session, question: result.data as GuessPlayerQuestion };
+    }
+
+    const elapsedMs = Date.now() - new Date(current.started_at).getTime();
+    if (elapsedMs <= GUESS_PLAYER_TIME_LIMIT_MS) return { session, question: current };
+
+    await lockExpiredGuessPlayerQuestion(db, current);
+    questions = await getGuessPlayerQuestions(db, session.id);
+  }
+}
+
+async function guessPlayerResultPayload(db: Db, session: GuessPlayerSession) {
+  const questions = await getGuessPlayerQuestions(db, session.id);
+  return {
+    session_id: session.id,
+    status: session.status,
+    score: session.score,
+    correct_answers: session.score,
+    total_questions: session.total_questions,
+    started_at: session.started_at,
+    completed_at: session.completed_at,
+    questions: questions.map((question) => {
+      const footballer = getFootballerById(question.footballer_id);
+      return {
+        question_id: question.id,
+        question_order: question.question_order,
+        club: question.club_hint,
+        country: question.country_hint,
+        position: question.position_hint,
+        user_answer: question.user_answer,
+        is_correct: question.is_correct,
+        correct_answer: footballer?.name ?? "Jugador",
+      };
+    }),
+  };
+}
+
 export function createApp(config = loadConfig(), db = createSupabase(config)) {
   const app = express();
   const loginLimiter = rateLimit({ windowMs: 60_000, max: 12 });
@@ -632,6 +801,210 @@ export function createApp(config = loadConfig(), db = createSupabase(config)) {
       next(error);
     }
   });
+
+  app.post("/api/guess-player/start", playerAuth, async (req: AuthedRequest, res, next) => {
+    try {
+      const player = req.auth!.player;
+      const active = await db
+        .from("guess_player_sessions")
+        .select("*")
+        .eq("player_id", player.id)
+        .eq("status", "active")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (active.error) throw active.error;
+
+      let session = active.data as GuessPlayerSession | null;
+      if (!session) {
+        const created = await db
+          .from("guess_player_sessions")
+          .insert({
+            player_id: player.id,
+            game_type: "guess_player",
+            status: "active",
+            score: 0,
+            total_questions: GUESS_PLAYER_QUESTION_COUNT,
+            started_at: new Date().toISOString(),
+            ip_address: clientIp(req),
+            user_agent: userAgent(req),
+          })
+          .select("*")
+          .single();
+        if (created.error) throw created.error;
+        session = created.data as GuessPlayerSession;
+
+        const selected = selectGuessPlayerQuestions(player.id, session.id);
+        const questions = selected.map((footballer, index) => ({
+          session_id: session!.id,
+          footballer_id: footballer.id,
+          question_order: index + 1,
+          club_hint: footballer.club,
+          country_hint: footballer.country,
+          position_hint: footballer.position,
+          started_at: index === 0 ? session!.started_at : null,
+        }));
+        const insertedQuestions = await db.from("guess_player_session_questions").insert(questions);
+        if (insertedQuestions.error) throw insertedQuestions.error;
+
+        await logAudit(db, req, "guess_player_start", { session_id: session.id }, player.id);
+      }
+
+      const current = await currentGuessPlayerQuestion(db, session);
+      res.json({
+        session_id: current.session.id,
+        status: current.session.status,
+        score: current.session.score,
+        total_questions: current.session.total_questions,
+        current_question: current.question ? guessQuestionPayload(current.question) : null,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get(
+    "/api/guess-player/session/:sessionId/current",
+    playerAuth,
+    async (req: AuthedRequest, res, next) => {
+      try {
+        const sessionId = req.params.sessionId;
+        if (!sessionId) throw new ApiError(400, "session_id_required");
+        const session = await getGuessPlayerSessionForPlayer(db, sessionId, req.auth!.player.id);
+        if (!session) throw new ApiError(404, "session_not_found");
+
+        const current = await currentGuessPlayerQuestion(db, session);
+        res.json({
+          session_id: current.session.id,
+          status: current.session.status,
+          score: current.session.score,
+          total_questions: current.session.total_questions,
+          current_question: current.question ? guessQuestionPayload(current.question) : null,
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post("/api/guess-player/answer", playerAuth, async (req: AuthedRequest, res, next) => {
+    try {
+      const player = req.auth!.player;
+      const sessionId = parseRequiredString(req.body, "session_id");
+      const questionId = parseRequiredString(req.body, "question_id");
+      const answer = parseRequiredString(req.body, "answer");
+      const session = await getGuessPlayerSessionForPlayer(db, sessionId, player.id);
+      if (!session) throw new ApiError(404, "session_not_found");
+      if (session.status !== "active") throw new ApiError(409, "session_not_active");
+
+      const sessionQuestions = await getGuessPlayerQuestions(db, sessionId);
+      const activeQuestion = sessionQuestions.find((question) => !question.is_locked);
+      if (!activeQuestion) throw new ApiError(409, "session_already_completed");
+      if (activeQuestion.id !== questionId) throw new ApiError(409, "question_not_active");
+      if (activeQuestion.is_locked) throw new ApiError(409, "question_already_locked");
+      if (!activeQuestion.started_at) {
+        throw new ApiError(409, "question_not_started");
+      }
+
+      const footballer = getFootballerById(activeQuestion.footballer_id);
+      if (!footballer) throw new ApiError(500, "footballer_not_found");
+
+      const elapsedMs = Date.now() - new Date(activeQuestion.started_at).getTime();
+      const isExpired = elapsedMs > GUESS_PLAYER_TIME_LIMIT_MS;
+      const isCorrect = !isExpired && isCorrectFootballerAnswer(footballer, answer);
+      const update = await db
+        .from("guess_player_session_questions")
+        .update({
+          answered_at: new Date().toISOString(),
+          user_answer: answer,
+          is_correct: isCorrect,
+          is_locked: true,
+        })
+        .eq("id", questionId)
+        .eq("session_id", sessionId)
+        .eq("is_locked", false)
+        .select("*")
+        .maybeSingle();
+      if (update.error) throw update.error;
+      if (!update.data) throw new ApiError(409, "question_already_locked");
+
+      const questions = await getGuessPlayerQuestions(db, sessionId);
+      const score = questions.filter((question) => question.is_correct).length;
+      const allLocked = questions.every((question) => question.is_locked);
+      let nextQuestion: GuessPlayerQuestion | null = null;
+      let nextSession = session;
+
+      if (allLocked) {
+        nextSession = await completeGuessPlayerSession(db, sessionId);
+      } else {
+        const next = questions.find((question) => !question.is_locked) ?? null;
+        if (next) {
+          const started = await db
+            .from("guess_player_session_questions")
+            .update({ started_at: new Date().toISOString() })
+            .eq("id", next.id)
+            .select("*")
+            .single();
+          if (started.error) throw started.error;
+          nextQuestion = started.data as GuessPlayerQuestion;
+        }
+        const sessionUpdate = await db
+          .from("guess_player_sessions")
+          .update({ score })
+          .eq("id", sessionId)
+          .select("*")
+          .single();
+        if (sessionUpdate.error) throw sessionUpdate.error;
+        nextSession = sessionUpdate.data as GuessPlayerSession;
+      }
+
+      await logAudit(
+        db,
+        req,
+        "guess_player_answer",
+        {
+          session_id: sessionId,
+          question_id: questionId,
+          is_correct: isCorrect,
+          expired: isExpired,
+        },
+        player.id,
+      );
+
+      res.json({
+        session_id: nextSession.id,
+        status: nextSession.status,
+        is_correct: isCorrect,
+        expired: isExpired,
+        correct_answer: footballer.name,
+        score: nextSession.score,
+        total_questions: nextSession.total_questions,
+        current_question: nextQuestion ? guessQuestionPayload(nextQuestion) : null,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get(
+    "/api/guess-player/session/:sessionId/result",
+    playerAuth,
+    async (req: AuthedRequest, res, next) => {
+      try {
+        const sessionId = req.params.sessionId;
+        if (!sessionId) throw new ApiError(400, "session_id_required");
+        const session = await getGuessPlayerSessionForPlayer(db, sessionId, req.auth!.player.id);
+        if (!session) throw new ApiError(404, "session_not_found");
+        const current =
+          session.status === "active"
+            ? (await currentGuessPlayerQuestion(db, session)).session
+            : session;
+        res.json(await guessPlayerResultPayload(db, current));
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
   app.post("/api/rocket/start", playerAuth, startLimiter, async (req: AuthedRequest, res, next) => {
     try {
@@ -983,7 +1356,7 @@ export function startServer() {
   const config = loadConfig();
   const app = createApp(config);
   app.listen(config.port, () => {
-    console.log(`Eureka Rocket API listening on ${config.port}`);
+    console.log(`EUREKA Juegos API listening on ${config.port}`);
   });
 }
 

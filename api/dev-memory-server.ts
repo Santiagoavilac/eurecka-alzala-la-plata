@@ -14,11 +14,19 @@ import {
   resolvePlayerIdentity,
   scoreForMultiplier,
 } from "./game/game";
+import {
+  GUESS_PLAYER_QUESTION_COUNT,
+  GUESS_PLAYER_TIME_LIMIT_SECONDS,
+  getFootballerById,
+  isCorrectFootballerAnswer,
+  selectGuessPlayerQuestions,
+} from "./game/guess-player";
 
 const COOKIE_NAME = "eureka_session";
 const MAX_ATTEMPTS = 5;
 const MAX_PLAYING_MS = 120_000;
 const CASHOUT_BACKDATE_LIMIT_MS = 1500;
+const GUESS_PLAYER_TIME_LIMIT_MS = GUESS_PLAYER_TIME_LIMIT_SECONDS * 1000;
 
 type Player = {
   id: string;
@@ -54,9 +62,38 @@ type Attempt = {
   created_at: string;
 };
 
+type GuessSession = {
+  id: string;
+  player_id: string;
+  status: "active" | "completed" | "expired";
+  score: number;
+  total_questions: number;
+  started_at: string;
+  completed_at: string | null;
+  created_at: string;
+};
+
+type GuessQuestion = {
+  id: string;
+  session_id: string;
+  footballer_id: string;
+  question_order: number;
+  club_hint: string;
+  country_hint: string;
+  position_hint: string;
+  started_at: string | null;
+  answered_at: string | null;
+  user_answer: string | null;
+  is_correct: boolean | null;
+  is_locked: boolean;
+  created_at: string;
+};
+
 const players = new Map<string, Player>();
 const sessions = new Map<string, Session>();
 const attempts = new Map<string, Attempt>();
+const guessSessions = new Map<string, GuessSession>();
+const guessQuestions = new Map<string, GuessQuestion[]>();
 
 function uuid() {
   return crypto.randomUUID();
@@ -239,6 +276,75 @@ function leaderboard(limit = 10) {
     });
 }
 
+function guessQuestionPayload(question: GuessQuestion) {
+  const startedAt = question.started_at ?? new Date().toISOString();
+  const elapsedMs = Date.now() - new Date(startedAt).getTime();
+  return {
+    question_id: question.id,
+    question_order: question.question_order,
+    total_questions: GUESS_PLAYER_QUESTION_COUNT,
+    club: question.club_hint,
+    country: question.country_hint,
+    position: question.position_hint,
+    started_at: startedAt,
+    server_time: new Date().toISOString(),
+    time_limit_seconds: GUESS_PLAYER_TIME_LIMIT_SECONDS,
+    time_remaining_seconds: Math.max(0, Math.ceil((GUESS_PLAYER_TIME_LIMIT_MS - elapsedMs) / 1000)),
+  };
+}
+
+function completeGuessSession(session: GuessSession) {
+  const questions = guessQuestions.get(session.id) ?? [];
+  session.status = "completed";
+  session.score = questions.filter((question) => question.is_correct).length;
+  session.completed_at = new Date().toISOString();
+  return session;
+}
+
+function currentGuessQuestion(session: GuessSession) {
+  const questions = guessQuestions.get(session.id) ?? [];
+  while (true) {
+    const current = questions.find((question) => !question.is_locked);
+    if (!current) return { session: completeGuessSession(session), question: null };
+
+    if (!current.started_at) current.started_at = new Date().toISOString();
+
+    const elapsedMs = Date.now() - new Date(current.started_at).getTime();
+    if (elapsedMs <= GUESS_PLAYER_TIME_LIMIT_MS) return { session, question: current };
+
+    current.answered_at = new Date().toISOString();
+    current.user_answer = null;
+    current.is_correct = false;
+    current.is_locked = true;
+  }
+}
+
+function guessResultPayload(session: GuessSession) {
+  const questions = guessQuestions.get(session.id) ?? [];
+  return {
+    session_id: session.id,
+    status: session.status,
+    score: session.score,
+    correct_answers: session.score,
+    total_questions: session.total_questions,
+    started_at: session.started_at,
+    completed_at: session.completed_at,
+    questions: questions.map((question) => {
+      const footballer = getFootballerById(question.footballer_id);
+      return {
+        question_id: question.id,
+        question_order: question.question_order,
+        club: question.club_hint,
+        country: question.country_hint,
+        position: question.position_hint,
+        user_answer: question.user_answer,
+        is_correct: question.is_correct,
+        correct_answer: footballer?.name ?? "Jugador",
+      };
+    }),
+  };
+}
+
 export function createDevMemoryApp() {
   const app = express();
   const cookieSecret = process.env.COOKIE_SECRET || "eureka-local-dev-secret";
@@ -302,6 +408,149 @@ export function createDevMemoryApp() {
 
   app.get("/api/player/me", requirePlayer, (req, res) => {
     res.json(playerPayload((req as Request & { player: Player }).player));
+  });
+
+  app.post("/api/guess-player/start", requirePlayer, (req, res) => {
+    const player = (req as Request & { player: Player }).player;
+    let session = [...guessSessions.values()].find(
+      (item) => item.player_id === player.id && item.status === "active",
+    );
+
+    if (!session) {
+      session = {
+        id: uuid(),
+        player_id: player.id,
+        status: "active",
+        score: 0,
+        total_questions: GUESS_PLAYER_QUESTION_COUNT,
+        started_at: new Date().toISOString(),
+        completed_at: null,
+        created_at: new Date().toISOString(),
+      };
+      guessSessions.set(session.id, session);
+
+      guessQuestions.set(
+        session.id,
+        selectGuessPlayerQuestions(player.id, session.id).map((footballer, index) => ({
+          id: uuid(),
+          session_id: session!.id,
+          footballer_id: footballer.id,
+          question_order: index + 1,
+          club_hint: footballer.club,
+          country_hint: footballer.country,
+          position_hint: footballer.position,
+          started_at: index === 0 ? session!.started_at : null,
+          answered_at: null,
+          user_answer: null,
+          is_correct: null,
+          is_locked: false,
+          created_at: new Date().toISOString(),
+        })),
+      );
+    }
+
+    const current = currentGuessQuestion(session);
+    res.json({
+      session_id: current.session.id,
+      status: current.session.status,
+      score: current.session.score,
+      total_questions: current.session.total_questions,
+      current_question: current.question ? guessQuestionPayload(current.question) : null,
+    });
+  });
+
+  app.get("/api/guess-player/session/:sessionId/current", requirePlayer, (req, res, next) => {
+    const player = (req as Request & { player: Player }).player;
+    const session = guessSessions.get(req.params.sessionId);
+    if (!session || session.player_id !== player.id) {
+      next(Object.assign(new Error("session_not_found"), { status: 404 }));
+      return;
+    }
+
+    const current = currentGuessQuestion(session);
+    res.json({
+      session_id: current.session.id,
+      status: current.session.status,
+      score: current.session.score,
+      total_questions: current.session.total_questions,
+      current_question: current.question ? guessQuestionPayload(current.question) : null,
+    });
+  });
+
+  app.post("/api/guess-player/answer", requirePlayer, (req, res, next) => {
+    try {
+      const player = (req as Request & { player: Player }).player;
+      const sessionId = String(req.body?.session_id ?? "");
+      const questionId = String(req.body?.question_id ?? "");
+      const answer = String(req.body?.answer ?? "").trim();
+      if (!sessionId) throw Object.assign(new Error("session_id_required"), { status: 400 });
+      if (!questionId) throw Object.assign(new Error("question_id_required"), { status: 400 });
+      if (!answer) throw Object.assign(new Error("answer_required"), { status: 400 });
+
+      const session = guessSessions.get(sessionId);
+      if (!session || session.player_id !== player.id) {
+        throw Object.assign(new Error("session_not_found"), { status: 404 });
+      }
+      if (session.status !== "active") {
+        throw Object.assign(new Error("session_not_active"), { status: 409 });
+      }
+
+      const questions = guessQuestions.get(sessionId) ?? [];
+      const activeQuestion = questions.find((question) => !question.is_locked);
+      if (!activeQuestion) {
+        throw Object.assign(new Error("session_already_completed"), { status: 409 });
+      }
+      if (activeQuestion.id !== questionId) {
+        throw Object.assign(new Error("question_not_active"), { status: 409 });
+      }
+      if (!activeQuestion.started_at) {
+        throw Object.assign(new Error("question_not_started"), { status: 409 });
+      }
+
+      const footballer = getFootballerById(activeQuestion.footballer_id);
+      if (!footballer) throw Object.assign(new Error("footballer_not_found"), { status: 500 });
+
+      const elapsedMs = Date.now() - new Date(activeQuestion.started_at).getTime();
+      const expired = elapsedMs > GUESS_PLAYER_TIME_LIMIT_MS;
+      const isCorrect = !expired && isCorrectFootballerAnswer(footballer, answer);
+      activeQuestion.answered_at = new Date().toISOString();
+      activeQuestion.user_answer = answer;
+      activeQuestion.is_correct = isCorrect;
+      activeQuestion.is_locked = true;
+
+      session.score = questions.filter((question) => question.is_correct).length;
+      const nextQuestion = questions.find((question) => !question.is_locked) ?? null;
+      if (nextQuestion) {
+        nextQuestion.started_at = new Date().toISOString();
+      } else {
+        completeGuessSession(session);
+      }
+
+      res.json({
+        session_id: session.id,
+        status: session.status,
+        is_correct: isCorrect,
+        expired,
+        correct_answer: footballer.name,
+        score: session.score,
+        total_questions: session.total_questions,
+        current_question: nextQuestion ? guessQuestionPayload(nextQuestion) : null,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/guess-player/session/:sessionId/result", requirePlayer, (req, res, next) => {
+    const player = (req as Request & { player: Player }).player;
+    const session = guessSessions.get(req.params.sessionId);
+    if (!session || session.player_id !== player.id) {
+      next(Object.assign(new Error("session_not_found"), { status: 404 }));
+      return;
+    }
+
+    if (session.status === "active") currentGuessQuestion(session);
+    res.json(guessResultPayload(session));
   });
 
   app.post("/api/rocket/start", requirePlayer, (req, res, next) => {
@@ -448,7 +697,7 @@ export function createDevMemoryApp() {
 export function startDevMemoryServer() {
   const port = Number(process.env.PORT || 4000);
   createDevMemoryApp().listen(port, () => {
-    console.log(`Eureka Rocket dev memory API listening on ${port}`);
+    console.log(`EUREKA Juegos dev memory API listening on ${port}`);
   });
 }
 

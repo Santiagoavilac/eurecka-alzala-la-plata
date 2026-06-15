@@ -36,12 +36,6 @@ export function LeaderboardTable({ data }: { data: LeaderboardEntry[] }) {
       className: "hidden sm:table-cell text-muted-foreground",
     },
     {
-      key: "bestMultiplier",
-      header: "Mult.",
-      sortable: true,
-      render: (r) => <span className="neon-text font-black">{r.bestMultiplier.toFixed(2)}x</span>,
-    },
-    {
       key: "score",
       header: "Puntaje",
       sortable: true,

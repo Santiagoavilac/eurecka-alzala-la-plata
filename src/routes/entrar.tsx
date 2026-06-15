@@ -5,14 +5,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EurekaLogo } from "@/components/EurekaLogo";
 import { apiErrorMessage, loginPlayer } from "@/lib/api";
+import { markGameMusicRequested, playGameMusic, stopGameMusic } from "@/lib/game-audio";
 
 export const Route = createFileRoute("/entrar")({
-  head: () => ({ meta: [{ title: "Crear mi pase — Eureka Rocket" }] }),
+  validateSearch: (search: Record<string, unknown>) => ({
+    next: typeof search.next === "string" ? search.next : undefined,
+  }),
+  head: () => ({ meta: [{ title: "Crear mi pase — EUREKA Juegos" }] }),
   component: EntrarPage,
 });
 
 function EntrarPage() {
   const navigate = useNavigate();
+  const { next } = Route.useSearch();
   const [form, setForm] = useState({ name: "", phone: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,13 +26,21 @@ function EntrarPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    const shouldEnterGuessPlayer = next === "/games/adivina-el-jugador";
+    if (shouldEnterGuessPlayer) {
+      markGameMusicRequested();
+      void playGameMusic();
+    }
     try {
       await loginPlayer({
         fullName: form.name,
         phone: form.phone,
       });
-      navigate({ to: "/rocket" });
+      navigate({ to: shouldEnterGuessPlayer ? next : "/games" });
     } catch (error) {
+      if (shouldEnterGuessPlayer) {
+        stopGameMusic();
+      }
       setError(`Error exacto: ${apiErrorMessage(error, "login_failed")}`);
     } finally {
       setLoading(false);
@@ -48,7 +61,7 @@ function EntrarPage() {
           Creá tu <span className="text-gradient-primary">pase</span>
         </h1>
         <p className="mt-3 text-sm text-muted-foreground">
-          Usaremos estos datos solo para validar tus intentos y ranking.
+          Usaremos estos datos para identificar tu pase en los juegos de EUREKA.
         </p>
 
         <form onSubmit={onSubmit} className="neon-border mt-8 space-y-5 rounded-2xl bg-surface p-6">
@@ -79,7 +92,7 @@ function EntrarPage() {
           {error && <p className="text-center text-xs font-bold text-destructive">{error}</p>}
 
           <p className="text-center text-[11px] uppercase tracking-widest text-muted-foreground">
-            Sin contraseña · Sin depósito · 5 intentos
+            Sin contraseña · Nombre y teléfono
           </p>
         </form>
       </main>

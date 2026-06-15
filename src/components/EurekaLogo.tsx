@@ -23,10 +23,6 @@ export function EurekaLogo({
     >
       <span className="text-foreground">EUR</span>
       <span className="neon-text">EKA</span>
-      <span className="text-foreground">·</span>
-      <span className="text-foreground/60 text-[0.5em] font-bold tracking-[0.3em] uppercase">
-        Rocket
-      </span>
     </div>
   );
 }

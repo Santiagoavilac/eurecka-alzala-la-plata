@@ -6,7 +6,7 @@ import { getLeaderboard } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/ranking")({
-  head: () => ({ meta: [{ title: "Ranking — Eureka Rocket" }] }),
+  head: () => ({ meta: [{ title: "Ranking — EUREKA Juegos" }] }),
   component: RankingPage,
 });
 
@@ -20,7 +20,7 @@ function RankingPage() {
           <EurekaLogo size="sm" />
         </Link>
         <Button asChild size="sm" className="font-bold uppercase tracking-widest">
-          <Link to="/rocket">Jugar</Link>
+          <Link to="/games">Juegos</Link>
         </Button>
       </header>
 
@@ -29,7 +29,7 @@ function RankingPage() {
           <span className="text-gradient-primary">Ranking</span>
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Los mejores multiplicadores de Eureka Rocket.
+          Puntajes destacados de las dinámicas de EUREKA.
         </p>
 
         <div className="mt-6">

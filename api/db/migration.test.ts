@@ -47,3 +47,21 @@ test("cashout rpc locks the attempt row and uses database server time", () => {
   assert.match(sql, /interval '1500 milliseconds'/);
   assert.doesNotMatch(sql, /math\.random/);
 });
+
+test("migration creates guess player session tables with locked answers", () => {
+  const sql = readAllMigrations();
+
+  for (const table of ["guess_player_sessions", "guess_player_session_questions"]) {
+    assert.match(sql, new RegExp(`create table public\\.${table}`));
+    assert.match(sql, new RegExp(`alter table public\\.${table} enable row level security`));
+    assert.match(sql, new RegExp(`revoke all on table public\\.${table} from anon, authenticated`));
+  }
+
+  assert.match(sql, /game_type text not null default 'guess_player'/);
+  assert.match(sql, /status text not null default 'active'/);
+  assert.match(sql, /question_order int not null/);
+  assert.match(sql, /footballer_id text not null/);
+  assert.match(sql, /user_answer text/);
+  assert.match(sql, /is_correct boolean/);
+  assert.match(sql, /is_locked boolean not null default false/);
+});
