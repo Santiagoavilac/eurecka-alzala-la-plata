@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 export const GUESS_PLAYER_QUESTION_COUNT = 5;
-export const GUESS_PLAYER_TIME_LIMIT_SECONDS = 7;
+export const GUESS_PLAYER_TIME_LIMIT_SECONDS = 11;
 
 export type Footballer = {
   id: string;
