@@ -20,6 +20,9 @@ test("accepts known aliases and accent-free names", () => {
   assert.equal(findFootballerByAnswer("rodri")?.name, "Rodrigo Hernández");
   assert.equal(findFootballerByAnswer("gavi")?.name, "Pablo Páez Gavi");
   assert.equal(findFootballerByAnswer("unai simon")?.name, "Unai Simón");
+  assert.equal(findFootballerByAnswer("unai")?.name, "Unai Simón");
+  assert.equal(findFootballerByAnswer("simon")?.name, "Unai Simón");
+  assert.equal(findFootballerByAnswer("zubimendi")?.name, "Martín Zubimendi");
   assert.equal(findFootballerByAnswer("dibu martinez")?.name, "Emiliano Martínez");
   assert.equal(findFootballerByAnswer("messi")?.name, "Lionel Messi");
 });

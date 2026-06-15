@@ -744,8 +744,30 @@ export function normalizeAnswer(value: string): string {
     .trim();
 }
 
+function getAcceptedVariations(nameStr: string): string[] {
+  const normalized = normalizeAnswer(nameStr);
+  if (!normalized) return [];
+
+  const variations = [normalized];
+  const words = normalized.split(" ");
+  if (words.length > 1) {
+    variations.push(words[0]);
+    variations.push(words[words.length - 1]);
+    if (words.length > 2) {
+      variations.push(words.slice(1).join(" "));
+    }
+  }
+  return variations;
+}
+
 function normalizedAcceptedAnswers(footballer: Footballer) {
-  return new Set([footballer.name, ...footballer.aliases].map(normalizeAnswer).filter(Boolean));
+  const answers = new Set<string>();
+  [footballer.name, ...footballer.aliases].forEach((nameStr) => {
+    getAcceptedVariations(nameStr).forEach((variation) => {
+      answers.add(variation);
+    });
+  });
+  return answers;
 }
 
 export function isCorrectFootballerAnswer(footballer: Footballer, answer: string): boolean {
