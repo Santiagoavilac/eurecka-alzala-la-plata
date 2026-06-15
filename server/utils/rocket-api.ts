@@ -143,7 +143,12 @@ type SupabaseErrorLike = {
 };
 
 type SupabaseOperation = "select" | "insert" | "update" | "rpc";
-type SupabaseTarget = "players" | "rocket_attempts" | "cash_out_rocket_attempt";
+type SupabaseTarget =
+  | "players"
+  | "rocket_attempts"
+  | "cash_out_rocket_attempt"
+  | "guess_player_sessions"
+  | "guess_player_session_questions";
 type SupabaseRuntimeDiagnostic = {
   supabase_url_set: boolean;
   supabase_url_host?: string;
@@ -240,6 +245,21 @@ export function classifySupabaseError(
       text.includes("function"))
   ) {
     return { ...base, code: "cash_out_rpc_missing" };
+  }
+
+  if (
+    (tableOrFunction === "guess_player_sessions" ||
+      tableOrFunction === "guess_player_session_questions") &&
+    (code === "42P01" ||
+      code === "PGRST205" ||
+      text.includes("guess_player_sessions") ||
+      text.includes("guess_player_session_questions") ||
+      text.includes("'guess_player_sessions'") ||
+      text.includes("'guess_player_session_questions'") ||
+      text.includes('"guess_player_sessions"') ||
+      text.includes('"guess_player_session_questions"'))
+  ) {
+    return { ...base, code: "guess_player_tables_missing" };
   }
 
   if (code?.startsWith("PGRST2") || text.includes("schema cache")) {

@@ -864,11 +864,11 @@ export function createApp(config = loadConfig(), db = createSupabase(config)) {
   });
 
   app.get(
-    "/api/guess-player/session/:sessionId/current",
+    ["/api/guess-player/current", "/api/guess-player/session/:sessionId/current"],
     playerAuth,
     async (req: AuthedRequest, res, next) => {
       try {
-        const sessionId = req.params.sessionId;
+        const sessionId = String(req.params.sessionId ?? req.query.session_id ?? "");
         if (!sessionId) throw new ApiError(400, "session_id_required");
         const session = await getGuessPlayerSessionForPlayer(db, sessionId, req.auth!.player.id);
         if (!session) throw new ApiError(404, "session_not_found");
@@ -987,11 +987,11 @@ export function createApp(config = loadConfig(), db = createSupabase(config)) {
   });
 
   app.get(
-    "/api/guess-player/session/:sessionId/result",
+    ["/api/guess-player/result", "/api/guess-player/session/:sessionId/result"],
     playerAuth,
     async (req: AuthedRequest, res, next) => {
       try {
-        const sessionId = req.params.sessionId;
+        const sessionId = String(req.params.sessionId ?? req.query.session_id ?? "");
         if (!sessionId) throw new ApiError(400, "session_id_required");
         const session = await getGuessPlayerSessionForPlayer(db, sessionId, req.auth!.player.id);
         if (!session) throw new ApiError(404, "session_not_found");

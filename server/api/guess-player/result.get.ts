@@ -1,22 +1,16 @@
 import { defineEventHandler, getQuery, setResponseStatus } from "h3";
 
-import {
-  attemptStatePayload,
-  getAttempt,
-  maybeFinishAttempt,
-  requireString,
-  toPublicApiError,
-} from "../../utils/rocket-api";
+import { getGuessPlayerResult } from "../../utils/guess-player-api";
+import { requireString, toPublicApiError } from "../../utils/rocket-api";
 
 export default defineEventHandler(async (event) => {
   try {
     const query = getQuery(event);
-    const attemptId = requireString(query.attempt_id, "attempt_id");
+    const sessionId = requireString(query.session_id, "session_id");
     const playerId = requireString(query.player_id, "player_id");
-    const attempt = await getAttempt(attemptId, playerId);
-    return attemptStatePayload(await maybeFinishAttempt(attempt));
+    return await getGuessPlayerResult(sessionId, playerId);
   } catch (error) {
-    const publicError = toPublicApiError(error, "rocket_state_failed");
+    const publicError = toPublicApiError(error, "guess_player_result_failed");
     setResponseStatus(event, publicError.statusCode);
     return {
       error: publicError.code,

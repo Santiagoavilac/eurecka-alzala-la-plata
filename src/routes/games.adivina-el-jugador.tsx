@@ -137,7 +137,11 @@ function GuessPlayerPage() {
         }
       } catch (error) {
         setError(apiErrorMessage(error, "guess_player_answer_failed"));
-        await refreshCurrent(session.sessionId);
+        try {
+          await refreshCurrent(session.sessionId);
+        } catch {
+          // Ignore secondary refresh errors so the primary answer error is displayed
+        }
       } finally {
         setSubmitting(false);
       }
@@ -215,7 +219,7 @@ function GuessPlayerPage() {
   return (
     <Shell player={player}>
       <div className="mx-auto max-w-2xl px-4 py-6">
-        {error && (
+        {error && session && (
           <div className="mb-4 rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm font-bold text-destructive">
             {error}
           </div>
@@ -300,6 +304,8 @@ function GuessPlayerPage() {
               </div>
             )}
           </section>
+        ) : error ? (
+          <ErrorPanel message={error} onRetry={restart} />
         ) : (
           <ResultPanel
             result={{
@@ -349,6 +355,23 @@ function Hint({ label, value }: { label: string; value: string }) {
       </div>
       <div className="mt-1 text-xl font-black uppercase tracking-tight">{value}</div>
     </div>
+  );
+}
+
+function ErrorPanel({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <section className="neon-border rounded-2xl bg-surface p-5 sm:p-7 text-center">
+      <Badge
+        variant="outline"
+        className="border-destructive text-destructive uppercase tracking-widest mb-4"
+      >
+        Error
+      </Badge>
+      <p className="text-sm font-bold text-destructive mb-6">{message}</p>
+      <Button onClick={onRetry} className="h-12 w-full font-black uppercase tracking-widest">
+        Reintentar
+      </Button>
+    </section>
   );
 }
 

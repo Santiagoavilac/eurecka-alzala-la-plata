@@ -7,7 +7,7 @@ import {
   isCorrectFootballerAnswer,
   selectGuessPlayerQuestions,
 } from "../../api/game/guess-player";
-import { db, getPlayer, requireString } from "./rocket-api";
+import { db, getPlayer, requireString, throwSupabaseApiError } from "./rocket-api";
 
 const GUESS_PLAYER_TIME_LIMIT_MS = GUESS_PLAYER_TIME_LIMIT_SECONDS * 1000;
 
@@ -90,7 +90,7 @@ async function sessionForPlayer(sessionId: string, playerId: string) {
     .eq("id", sessionId)
     .eq("player_id", playerId)
     .maybeSingle();
-  if (result.error) throw result.error;
+  if (result.error) throwSupabaseApiError(result.error, "select", "guess_player_sessions");
   return result.data as GuessPlayerSession | null;
 }
 
@@ -100,7 +100,7 @@ async function questionsForSession(sessionId: string) {
     .select("*")
     .eq("session_id", sessionId)
     .order("question_order", { ascending: true });
-  if (result.error) throw result.error;
+  if (result.error) throwSupabaseApiError(result.error, "select", "guess_player_session_questions");
   return (result.data ?? []) as GuessPlayerQuestion[];
 }
 
@@ -117,7 +117,7 @@ async function completeSession(sessionId: string) {
     .eq("id", sessionId)
     .select("*")
     .single();
-  if (result.error) throw result.error;
+  if (result.error) throwSupabaseApiError(result.error, "update", "guess_player_sessions");
   return result.data as GuessPlayerSession;
 }
 
@@ -134,7 +134,7 @@ async function lockExpiredQuestion(question: GuessPlayerQuestion) {
     .eq("is_locked", false)
     .select("*")
     .maybeSingle();
-  if (result.error) throw result.error;
+  if (result.error) throwSupabaseApiError(result.error, "update", "guess_player_session_questions");
 }
 
 async function currentQuestion(session: GuessPlayerSession) {
@@ -151,7 +151,8 @@ async function currentQuestion(session: GuessPlayerSession) {
         .eq("id", current.id)
         .select("*")
         .single();
-      if (result.error) throw result.error;
+      if (result.error)
+        throwSupabaseApiError(result.error, "update", "guess_player_session_questions");
       return { session, question: result.data as GuessPlayerQuestion };
     }
 
@@ -183,7 +184,7 @@ export async function startGuessPlayerSession(playerId: string) {
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (active.error) throw active.error;
+  if (active.error) throwSupabaseApiError(active.error, "select", "guess_player_sessions");
 
   let session = active.data as GuessPlayerSession | null;
   if (!session) {
@@ -199,7 +200,7 @@ export async function startGuessPlayerSession(playerId: string) {
       })
       .select("*")
       .single();
-    if (created.error) throw created.error;
+    if (created.error) throwSupabaseApiError(created.error, "insert", "guess_player_sessions");
     session = created.data as GuessPlayerSession;
 
     const questions = selectGuessPlayerQuestions(player.id, session.id).map(
@@ -214,7 +215,8 @@ export async function startGuessPlayerSession(playerId: string) {
       }),
     );
     const inserted = await client().from("guess_player_session_questions").insert(questions);
-    if (inserted.error) throw inserted.error;
+    if (inserted.error)
+      throwSupabaseApiError(inserted.error, "insert", "guess_player_session_questions");
   }
 
   const current = await currentQuestion(session);
@@ -268,7 +270,7 @@ export async function submitGuessPlayerAnswer(body: Record<string, unknown>) {
     .eq("is_locked", false)
     .select("*")
     .maybeSingle();
-  if (update.error) throw update.error;
+  if (update.error) throwSupabaseApiError(update.error, "update", "guess_player_session_questions");
   if (!update.data)
     throw createError({ statusCode: 409, statusMessage: "question_already_locked" });
 
@@ -289,7 +291,8 @@ export async function submitGuessPlayerAnswer(body: Record<string, unknown>) {
         .eq("id", next.id)
         .select("*")
         .single();
-      if (started.error) throw started.error;
+      if (started.error)
+        throwSupabaseApiError(started.error, "update", "guess_player_session_questions");
       nextQuestion = started.data as GuessPlayerQuestion;
     }
 
@@ -299,7 +302,8 @@ export async function submitGuessPlayerAnswer(body: Record<string, unknown>) {
       .eq("id", sessionId)
       .select("*")
       .single();
-    if (updatedSession.error) throw updatedSession.error;
+    if (updatedSession.error)
+      throwSupabaseApiError(updatedSession.error, "update", "guess_player_sessions");
     nextSession = updatedSession.data as GuessPlayerSession;
   }
 

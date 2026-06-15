@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite dev",
     "api:dev": "tsx watch api/server.ts",
-    "api:dev:memory": "FRONTEND_URL=http://localhost:8080 PORT=4000 COOKIE_SECRET=eureka-local-dev-secret tsx api/dev-memory-server.ts",
+    "api:dev:memory": "FRONTEND_URL=http://127.0.0.1:3000,http://localhost:3000 PORT=4000 COOKIE_SECRET=eureka-local-dev-secret tsx api/dev-memory-server.ts",
     "api:start": "tsx api/server.ts",
     "api:build": "tsc -p tsconfig.api.json",
     "api:test": "node --import tsx --test \"api/**/*.test.ts\"",

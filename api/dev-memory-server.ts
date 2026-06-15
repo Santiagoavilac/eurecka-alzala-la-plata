@@ -348,9 +348,25 @@ function guessResultPayload(session: GuessSession) {
 export function createDevMemoryApp() {
   const app = express();
   const cookieSecret = process.env.COOKIE_SECRET || "eureka-local-dev-secret";
-  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
+  const frontendOrigins = (
+    process.env.FRONTEND_URL || "http://127.0.0.1:3000,http://localhost:3000,http://localhost:8080"
+  )
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 
-  app.use(cors({ credentials: true, origin: frontendUrl }));
+  app.use(
+    cors({
+      credentials: true,
+      origin(origin, callback) {
+        if (!origin || frontendOrigins.includes(origin)) {
+          callback(null, true);
+          return;
+        }
+        callback(new Error("cors_origin_not_allowed"));
+      },
+    }),
+  );
   app.use(express.json({ limit: "32kb" }));
   app.use(cookieParser(cookieSecret));
 
@@ -459,23 +475,28 @@ export function createDevMemoryApp() {
     });
   });
 
-  app.get("/api/guess-player/session/:sessionId/current", requirePlayer, (req, res, next) => {
-    const player = (req as Request & { player: Player }).player;
-    const session = guessSessions.get(req.params.sessionId);
-    if (!session || session.player_id !== player.id) {
-      next(Object.assign(new Error("session_not_found"), { status: 404 }));
-      return;
-    }
+  app.get(
+    ["/api/guess-player/current", "/api/guess-player/session/:sessionId/current"],
+    requirePlayer,
+    (req, res, next) => {
+      const player = (req as Request & { player: Player }).player;
+      const sessionId = String(req.params.sessionId ?? req.query.session_id ?? "");
+      const session = guessSessions.get(sessionId);
+      if (!session || session.player_id !== player.id) {
+        next(Object.assign(new Error("session_not_found"), { status: 404 }));
+        return;
+      }
 
-    const current = currentGuessQuestion(session);
-    res.json({
-      session_id: current.session.id,
-      status: current.session.status,
-      score: current.session.score,
-      total_questions: current.session.total_questions,
-      current_question: current.question ? guessQuestionPayload(current.question) : null,
-    });
-  });
+      const current = currentGuessQuestion(session);
+      res.json({
+        session_id: current.session.id,
+        status: current.session.status,
+        score: current.session.score,
+        total_questions: current.session.total_questions,
+        current_question: current.question ? guessQuestionPayload(current.question) : null,
+      });
+    },
+  );
 
   app.post("/api/guess-player/answer", requirePlayer, (req, res, next) => {
     try {
@@ -541,17 +562,22 @@ export function createDevMemoryApp() {
     }
   });
 
-  app.get("/api/guess-player/session/:sessionId/result", requirePlayer, (req, res, next) => {
-    const player = (req as Request & { player: Player }).player;
-    const session = guessSessions.get(req.params.sessionId);
-    if (!session || session.player_id !== player.id) {
-      next(Object.assign(new Error("session_not_found"), { status: 404 }));
-      return;
-    }
+  app.get(
+    ["/api/guess-player/result", "/api/guess-player/session/:sessionId/result"],
+    requirePlayer,
+    (req, res, next) => {
+      const player = (req as Request & { player: Player }).player;
+      const sessionId = String(req.params.sessionId ?? req.query.session_id ?? "");
+      const session = guessSessions.get(sessionId);
+      if (!session || session.player_id !== player.id) {
+        next(Object.assign(new Error("session_not_found"), { status: 404 }));
+        return;
+      }
 
-    if (session.status === "active") currentGuessQuestion(session);
-    res.json(guessResultPayload(session));
-  });
+      if (session.status === "active") currentGuessQuestion(session);
+      res.json(guessResultPayload(session));
+    },
+  );
 
   app.post("/api/rocket/start", requirePlayer, (req, res, next) => {
     try {

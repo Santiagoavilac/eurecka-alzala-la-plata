@@ -509,7 +509,7 @@ export async function getGuessPlayerCurrentQuestion(
   sessionId: string,
 ): Promise<GuessPlayerSessionState> {
   const payload = await request<GuessPlayerSessionApiPayload>(
-    `guess-player/session/${encodeURIComponent(sessionId)}/current?player_id=${encodeURIComponent(
+    `guess-player/current?session_id=${encodeURIComponent(sessionId)}&player_id=${encodeURIComponent(
       requireStoredPlayerId(),
     )}`,
   );
@@ -544,7 +544,7 @@ export async function submitGuessPlayerAnswer({
 
 export async function getGuessPlayerResult(sessionId: string): Promise<GuessPlayerResult> {
   const payload = await request<GuessPlayerResultApiPayload>(
-    `guess-player/session/${encodeURIComponent(sessionId)}/result?player_id=${encodeURIComponent(
+    `guess-player/result?session_id=${encodeURIComponent(sessionId)}&player_id=${encodeURIComponent(
       requireStoredPlayerId(),
     )}`,
   );
